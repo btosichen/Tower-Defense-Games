@@ -104,7 +104,7 @@
 </head>
 <body>
 
-    <div class="diff-tag">每波增加入口 | 敵人加速 | 血量提升</div>
+    <div class="diff-tag">全方位亂數進攻 | 敵人海量湧入 | 極限挑戰</div>
 
     <div id="ui-layer">
         <div id="top-bar">
@@ -255,20 +255,20 @@
         const GRID_H = 15;
         
         // --- 定義四條路徑 ---
-        // 路徑 1: 西路 (West) - 波次 1 開啟
+        // 路徑 1: 西路 (West)
         const PATH_WEST = [
             {x:0, z:2}, {x:5, z:2}, {x:5, z:10}, {x:12, z:10}, 
             {x:12, z:12}, {x:18, z:12}
         ];
-        // 路徑 2: 北路 (North) - 波次 2 開啟
+        // 路徑 2: 北路 (North)
         const PATH_NORTH = [
             {x:8, z:0}, {x:8, z:5}, {x:14, z:5}, {x:14, z:12}, {x:18, z:12}
         ];
-        // 路徑 3: 南路 (South) - 波次 3 開啟
+        // 路徑 3: 南路 (South)
         const PATH_SOUTH = [
             {x:10, z:14}, {x:10, z:8}, {x:16, z:8}, {x:16, z:12}, {x:18, z:12}
         ];
-        // 路徑 4: 東路 (East) - 波次 4 開啟 (短而危險)
+        // 路徑 4: 東路 (East)
         const PATH_EAST = [
             {x:19, z:4}, {x:16, z:4}, {x:16, z:8}, {x:18, z:8}, {x:18, z:12}
         ];
@@ -503,19 +503,19 @@
                 this.waveActive = true;
                 document.getElementById('next-wave-btn').disabled = true;
 
-                // 1. 決定本波開啟的路徑 (入口隨波次增加)
-                const activePaths = [PATH_WEST]; // Wave 1 只有西路
-                if (this.wave >= 2) activePaths.push(PATH_NORTH);
-                if (this.wave >= 3) activePaths.push(PATH_SOUTH);
-                if (this.wave >= 4) activePaths.push(PATH_EAST);
+                // 1. 所有地面路徑全開，實現完全隨機進攻
+                const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
 
-                // 2. 數量 & 難度
-                const count = 8 + Math.floor(this.wave * 2.5);
-                const hpMult = Math.pow(1.5, this.wave - 1); // 血量每波 1.5倍 (非常高)
+                // 2. 數量 & 難度 (海量敵人)
+                // 數量：從 20 隻起跳，每波 +5 隻 (非常多)
+                const count = 20 + Math.floor(this.wave * 5);
                 
-                // 3. 生成速度：每過一關間隔減少 (越快)
-                // 基礎 50，每波減 4，最低 15
-                let spawnDelayBase = Math.max(15, 50 - (this.wave * 4));
+                // 血量：每波 1.5倍
+                const hpMult = Math.pow(1.5, this.wave - 1); 
+                
+                // 3. 生成速度：極快
+                // 基礎 30，每波減 2，最低 8
+                let spawnDelayBase = Math.max(8, 30 - (this.wave * 2));
 
                 for(let i=0; i<count; i++) {
                     let type = 'NORMAL';
@@ -524,11 +524,11 @@
                     if (this.wave >= 2 && rand > 0.6) type = 'FAST';
                     if (this.wave >= 3 && rand > 0.85) type = 'TANK';
                     // 空襲 Wave 5+
-                    if (this.wave >= 5 && Math.random() > 0.7) type = 'FLYING';
+                    if (this.wave >= 5 && Math.random() > 0.8) type = 'FLYING';
 
                     let path = activePaths[0];
                     if (type !== 'FLYING') {
-                        // 從已解鎖的路徑中隨機選一條
+                        // 從所有路徑中隨機選一條
                         path = activePaths[Math.floor(Math.random() * activePaths.length)];
                     }
                     
@@ -600,7 +600,7 @@
             endWave() {
                 this.waveActive = false;
                 this.wave++;
-                this.money += 80 + (this.wave * 12);
+                this.money += 100 + (this.wave * 15); // 給多一點錢因為太難了
                 document.getElementById('next-wave-btn').disabled = false;
                 AudioSys.build();
             }
