@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 四面楚歌</title>
+    <title>3D 極限塔防 - 毀滅倒數</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
-            --accent: #ff6d00;
+            --accent: #d50000;
             --bg-ui: rgba(255, 255, 255, 0.9);
             --text-color: #333;
         }
@@ -31,7 +31,6 @@
         .stat.money span { color: #f57f17; }
         .stat.animals span { color: #2979ff; }
 
-        /* 音樂開關按鈕 */
         #bgm-toggle {
             background: #eee; border: none; border-radius: 50%; width: 40px; height: 40px;
             cursor: pointer; font-size: 1.2em; display: flex; justify-content: center; align-items: center;
@@ -51,7 +50,7 @@
             position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         .tower-card:hover { transform: translateY(-10px); border-color: var(--accent); }
-        .tower-card.active { border-color: var(--accent); background: #fff3e0; transform: translateY(-10px); }
+        .tower-card.active { border-color: var(--accent); background: #ffebee; transform: translateY(-10px); }
         
         .tower-icon { 
             width: 50px; height: 50px; margin: 0 auto 5px; border-radius: 12px; 
@@ -63,9 +62,9 @@
         .tower-name { font-size: 0.8em; margin-bottom: 2px; color: #555; }
 
         .action-btn {
-            background: linear-gradient(45deg, #ff6d00, #ff9100); color: white; border: none;
+            background: linear-gradient(45deg, #d50000, #ff1744); color: white; border: none;
             padding: 15px 40px; border-radius: 50px; font-size: 1.2em; font-weight: bold;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(255, 109, 0, 0.4);
+            cursor: pointer; box-shadow: 0 5px 15px rgba(213, 0, 0, 0.4);
             transition: transform 0.1s; pointer-events: auto; height: 80px;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
         }
@@ -95,16 +94,24 @@
         
         .diff-tag {
             position: absolute; top: 10px; left: 10px;
-            background: rgba(255,255,255,0.8); color: #d84315;
+            background: rgba(255,255,255,0.8); color: #d50000;
             padding: 5px 15px; border-radius: 20px; font-size: 0.9em;
             pointer-events: auto; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        /* 塔被摧毀的提示 */
+        #tower-destroyed-msg {
+            position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+            color: red; font-weight: bold; font-size: 2em; text-shadow: 0 0 10px black;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s;
         }
     </style>
 </head>
 <body>
 
-    <div class="diff-tag">全方位亂數進攻 | 敵人海量湧入 | 極限挑戰</div>
+    <div class="diff-tag">極限模式: 拆塔炸彈客 | 18格狙擊手</div>
+    <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
     <div id="ui-layer">
         <div id="top-bar">
@@ -152,7 +159,7 @@
                 <div class="tower-cost">$180</div>
             </div>
 
-            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">🚀 下一波</button>
+            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">⚔️ 迎戰強敵</button>
         </div>
     </div>
 
@@ -163,9 +170,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // 0. 音效系統
-        // ==========================================
         const AudioSys = {
             ctx: new (window.AudioContext || window.webkitAudioContext)(),
             bgmInterval: null,
@@ -195,6 +199,8 @@
             boom() { this.play('sawtooth', 100, 0.3, 0.15); },
             error() { this.play('triangle', 150, 0.2, 0.1); },
             animalDie() { this.play('sawtooth', 50, 0.8, 0.2); },
+            enemyShoot() { this.play('square', 400, 0.1, 0.05); }, 
+            towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, // 塔被毀音效
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -211,21 +217,9 @@
             
             startBGM() {
                 if (this.bgmInterval) return;
-                const melody = [
-                    523.25, 0, 523.25, 0, 783.99, 0, 783.99, 0, 
-                    880.00, 0, 880.00, 0, 783.99, 0, 0, 0,      
-                    698.46, 0, 698.46, 0, 659.25, 0, 659.25, 0, 
-                    587.33, 0, 587.33, 0, 523.25, 0, 0, 0,      
-                    783.99, 0, 783.99, 0, 698.46, 0, 698.46, 0, 
-                    659.25, 0, 659.25, 0, 587.33, 0, 0, 0       
-                ];
-                const bass = [
-                    261.63, 261.63, 392.00, 392.00,
-                    440.00, 440.00, 392.00, 392.00,
-                    349.23, 349.23, 329.63, 329.63,
-                    293.66, 293.66, 261.63, 261.63
-                ];
-                const tempo = 200; 
+                const melody = [523,0,523,0,783,0,783,0,880,0,880,0,783,0,0,0,698,0,698,0,659,0,659,0,587,0,587,0,523,0,0,0];
+                const bass = [261,261,392,392,440,440,392,392,349,349,329,329,293,293,261,261];
+                const tempo = 170; 
 
                 this.bgmInterval = setInterval(() => {
                     if (this.isBgmMuted) return;
@@ -247,31 +241,14 @@
             }
         };
 
-        // ==========================================
-        // 1. 遊戲配置與 3D 初始化
-        // ==========================================
         const TILE_SIZE = 5; 
         const GRID_W = 20;
         const GRID_H = 15;
         
-        // --- 定義四條路徑 ---
-        // 路徑 1: 西路 (West)
-        const PATH_WEST = [
-            {x:0, z:2}, {x:5, z:2}, {x:5, z:10}, {x:12, z:10}, 
-            {x:12, z:12}, {x:18, z:12}
-        ];
-        // 路徑 2: 北路 (North)
-        const PATH_NORTH = [
-            {x:8, z:0}, {x:8, z:5}, {x:14, z:5}, {x:14, z:12}, {x:18, z:12}
-        ];
-        // 路徑 3: 南路 (South)
-        const PATH_SOUTH = [
-            {x:10, z:14}, {x:10, z:8}, {x:16, z:8}, {x:16, z:12}, {x:18, z:12}
-        ];
-        // 路徑 4: 東路 (East)
-        const PATH_EAST = [
-            {x:19, z:4}, {x:16, z:4}, {x:16, z:8}, {x:18, z:8}, {x:18, z:12}
-        ];
+        const PATH_WEST = [{x:0, z:2}, {x:5, z:2}, {x:5, z:10}, {x:12, z:10}, {x:12, z:12}, {x:18, z:12}];
+        const PATH_NORTH = [{x:8, z:0}, {x:8, z:5}, {x:14, z:5}, {x:14, z:12}, {x:18, z:12}];
+        const PATH_SOUTH = [{x:10, z:14}, {x:10, z:8}, {x:16, z:8}, {x:16, z:12}, {x:18, z:12}];
+        const PATH_EAST = [{x:19, z:4}, {x:16, z:4}, {x:16, z:8}, {x:18, z:8}, {x:18, z:12}];
 
         const TOWER_DATA = {
             ARCHER: { cost: 40, range: 7, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' },
@@ -295,7 +272,6 @@
                 this.spawnQueue = [];
                 this.clock = new THREE.Clock();
 
-                // Scene
                 this.scene = new THREE.Scene();
                 this.scene.background = new THREE.Color(0x87CEEB); 
                 this.scene.fog = new THREE.Fog(0x87CEEB, 60, 200);
@@ -311,28 +287,23 @@
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 document.body.appendChild(this.renderer.domElement);
 
-                // Lighting
                 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                 this.scene.add(ambientLight);
-
                 const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
                 dirLight.position.set(50, 100, 50);
                 dirLight.castShadow = true;
                 dirLight.shadow.mapSize.width = 2048;
                 dirLight.shadow.mapSize.height = 2048;
                 this.scene.add(dirLight);
-
                 const spotLight = new THREE.SpotLight(0xffe0b2, 0.4);
                 spotLight.position.set(0, 50, 0);
                 this.scene.add(spotLight);
 
-                // Init
                 this.grid = []; 
                 this.createMap();
                 this.createDecorations(); 
                 this.initAnimals();       
 
-                // Interaction
                 this.raycaster = new THREE.Raycaster();
                 this.mouse = new THREE.Vector2();
                 this.buildType = null;
@@ -358,10 +329,7 @@
                 window.addEventListener('resize', () => this.onResize());
                 window.addEventListener('mousemove', (e) => this.onMouseMove(e));
                 window.addEventListener('mousedown', (e) => this.onClick(e));
-
-                window.addEventListener('click', () => {
-                    if (AudioSys.isBgmMuted) AudioSys.toggleBGM();
-                }, { once: true });
+                window.addEventListener('click', () => { if (AudioSys.isBgmMuted) AudioSys.toggleBGM(); }, { once: true });
 
                 this.updateUI();
                 this.animate();
@@ -383,14 +351,10 @@
                     this.grid[x] = [];
                     for(let z=0; z<GRID_H; z++) {
                         let type = 0; 
-                        // 檢查所有路徑
-                        if (this.isPointOnPath(x, z, PATH_WEST) || 
-                            this.isPointOnPath(x, z, PATH_NORTH) ||
-                            this.isPointOnPath(x, z, PATH_SOUTH) ||
-                            this.isPointOnPath(x, z, PATH_EAST)) {
+                        if (this.isPointOnPath(x, z, PATH_WEST) || this.isPointOnPath(x, z, PATH_NORTH) ||
+                            this.isPointOnPath(x, z, PATH_SOUTH) || this.isPointOnPath(x, z, PATH_EAST)) {
                             type = 1;
                         }
-
                         const h = type === 1 ? 0.2 : 0.5;
                         const geo = new THREE.BoxGeometry(TILE_SIZE * 0.95, h, TILE_SIZE * 0.95);
                         const mat = type === 1 ? matPath : matEmpty;
@@ -399,28 +363,19 @@
                         tile.receiveShadow = true;
                         tile.castShadow = true;
                         this.scene.add(tile);
-                        
                         this.grid[x][z] = { type: type, mesh: tile, tower: null, x:x, z:z };
                     }
                 }
 
-                // 終點 (在 PATH_WEST/NORTH/SOUTH/EAST 的匯集處附近)
                 const endP = {x: 18, z: 12};
-                const endBase = new THREE.Mesh(
-                    new THREE.CylinderGeometry(3, 4, 4, 8), 
-                    new THREE.MeshPhongMaterial({color: 0xd32f2f})
-                );
+                const endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
                 endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
                 endBase.castShadow = true;
                 this.scene.add(endBase);
                 
-                // 起點標記 (四個起點都放)
                 const startPoints = [PATH_WEST[0], PATH_NORTH[0], PATH_SOUTH[0], PATH_EAST[0]];
                 startPoints.forEach(start => {
-                    const startM = new THREE.Mesh(
-                        new THREE.BoxGeometry(4, 0.5, 4),
-                        new THREE.MeshLambertMaterial({color: 0x76ff03})
-                    );
+                    const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x76ff03}));
                     startM.position.set(start.x * TILE_SIZE, 0.5, start.z * TILE_SIZE);
                     this.scene.add(startM);
                 });
@@ -437,7 +392,6 @@
                             const posX = x * TILE_SIZE;
                             const posZ = z * TILE_SIZE;
                             const rand = Math.random();
-
                             if (rand > 0.6) {
                                 const tree = new THREE.Group();
                                 const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2), trunkMat);
@@ -445,7 +399,6 @@
                                 const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 8), leavesMat);
                                 leaves.position.y = 3.5; leaves.castShadow = true;
                                 tree.add(trunk, leaves);
-
                                 const s = 0.8 + Math.random() * 0.4;
                                 tree.scale.set(s, s, s);
                                 tree.rotation.y = Math.random() * Math.PI;
@@ -471,9 +424,7 @@
             }
 
             initAnimals() {
-                const animalLocs = [
-                    PATH_WEST[2], PATH_NORTH[2], PATH_SOUTH[2]
-                ];
+                const animalLocs = [PATH_WEST[2], PATH_NORTH[2], PATH_SOUTH[2]];
                 animalLocs.forEach(loc => {
                     const animal = new Animal(loc.x, loc.z);
                     this.scene.add(animal.mesh);
@@ -496,39 +447,30 @@
                 return false;
             }
 
-            // --- Game Logic ---
-
             nextWave() {
                 if(this.waveActive) return;
                 this.waveActive = true;
                 document.getElementById('next-wave-btn').disabled = true;
 
-                // 1. 所有地面路徑全開，實現完全隨機進攻
                 const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
 
-                // 2. 數量 & 難度 (海量敵人)
-                // 數量：從 20 隻起跳，每波 +5 隻 (非常多)
-                const count = 20 + Math.floor(this.wave * 5);
-                
-                // 血量：每波 1.5倍
+                const count = 30 + Math.floor(this.wave * 5);
                 const hpMult = Math.pow(1.5, this.wave - 1); 
                 
-                // 3. 生成速度：極快
-                // 基礎 30，每波減 2，最低 8
-                let spawnDelayBase = Math.max(8, 30 - (this.wave * 2));
+                let spawnDelayBase = Math.max(5, 30 - (this.wave * 2));
 
                 for(let i=0; i<count; i++) {
                     let type = 'NORMAL';
                     const rand = Math.random();
 
-                    if (this.wave >= 2 && rand > 0.6) type = 'FAST';
+                    if (this.wave >= 1 && rand > 0.6) type = 'FAST';
+                    if (this.wave >= 2 && rand > 0.75) type = 'SHOOTER'; 
                     if (this.wave >= 3 && rand > 0.85) type = 'TANK';
-                    // 空襲 Wave 5+
-                    if (this.wave >= 5 && Math.random() > 0.8) type = 'FLYING';
+                    if (this.wave >= 3 && rand > 0.92) type = 'BOMBER'; // 新增炸彈客
+                    if (this.wave >= 4 && Math.random() > 0.8) type = 'FLYING';
 
                     let path = activePaths[0];
                     if (type !== 'FLYING') {
-                        // 從所有路徑中隨機選一條
                         path = activePaths[Math.floor(Math.random() * activePaths.length)];
                     }
                     
@@ -563,7 +505,7 @@
 
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     const e = this.enemies[i];
-                    const status = e.update(this.animals);
+                    const status = e.update(this.animals, this.towers); // 傳入塔列表供炸彈客攻擊
                     
                     if (status === 'REACHED') {
                         this.lives--;
@@ -600,7 +542,7 @@
             endWave() {
                 this.waveActive = false;
                 this.wave++;
-                this.money += 100 + (this.wave * 15); // 給多一點錢因為太難了
+                this.money += 150 + (this.wave * 25); 
                 document.getElementById('next-wave-btn').disabled = false;
                 AudioSys.build();
             }
@@ -619,6 +561,22 @@
                 document.getElementById('animals-txt').innerText = this.animals.length;
                 AudioSys.animalDie();
                 this.gameOver("小動物被殺死了！我們沒能保護它...");
+            }
+
+            removeTower(t) {
+                this.scene.remove(t.mesh);
+                this.grid[t.gx][t.gz].tower = null;
+                const idx = this.towers.indexOf(t);
+                if (idx > -1) this.towers.splice(idx, 1);
+                
+                // 爆炸特效
+                game.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xff0000, 'explode', 2));
+                AudioSys.towerDestroy();
+                
+                // UI 提示
+                const msg = document.getElementById('tower-destroyed-msg');
+                msg.style.opacity = 1;
+                setTimeout(() => msg.style.opacity = 0, 1500);
             }
 
             selectBuildType(type) {
@@ -788,10 +746,6 @@
             }
         }
 
-        // ==========================================
-        // 2. 實體類別
-        // ==========================================
-
         class Animal {
             constructor(gx, gz) {
                 this.hpMax = 200; 
@@ -850,7 +804,9 @@
                 this.isSlowed = 0;
                 this.flyHeight = 0;
                 this.attackCooldown = 0;
-                this.damage = 2; 
+                this.damage = 4; 
+                this.defense = Math.floor(game.wave * 0.8) + 1; 
+                this.attackRange = 3; 
 
                 let geo;
                 if (type === 'NORMAL') {
@@ -859,15 +815,34 @@
                 } else if (type === 'FAST') {
                     geo = new THREE.ConeGeometry(1, 2.5, 8);
                     this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult;
+                    this.attackRange = 2; 
+                    this.damage = 3;
                 } else if (type === 'TANK') {
                     geo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
-                    this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 5;
+                    this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; 
+                    this.damage = 10; 
+                    this.defense += 3; 
+                    this.attackRange = 5; 
+                } else if (type === 'SHOOTER') { 
+                    geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8);
+                    this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; 
+                    this.damage = 8; 
+                    // --- 調整：18格超遠射程 ---
+                    this.attackRange = 18; 
+                } else if (type === 'BOMBER') { // 新增：炸彈客
+                    geo = new THREE.IcosahedronGeometry(1.8, 1);
+                    this.color = 0x212121; // 黑色
+                    this.speed = 0.05; // 慢速
+                    this.hpMax = 80 * hpMult; // 血厚
+                    this.attackRange = 6; // 炸彈投擲距離
+                    this.defense += 5; // 高防禦
+                    this.reward = 50;
                 } else if (type === 'FLYING') {
                     geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6);
                     this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25;
                     const startP = {x: 0, z: Math.random() * GRID_H}; 
                     this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE);
-                    const endP = {x: 18, z: 12}; // FLYING 目標終點
+                    const endP = {x: 18, z: 12}; 
                     this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE);
                 }
 
@@ -895,7 +870,7 @@
                 this.onBeforeRender = () => { barContainer.lookAt(game.camera.position); };
             }
 
-            update(animals) {
+            update(animals, towers) {
                 let currentSpeed = this.speed;
                 if (this.isSlowed > 0) {
                     currentSpeed *= 0.6; this.isSlowed--;
@@ -904,13 +879,66 @@
                     this.mesh.material.emissive.setHex(0x000000);
                 }
 
+                // 炸彈客優先攻擊塔
+                if (this.type === 'BOMBER' && towers.length > 0) {
+                    for(let tower of towers) {
+                        const dist = this.mesh.position.distanceTo(tower.mesh.position);
+                        const range = this.attackRange * TILE_SIZE; 
+                        
+                        if (dist < range) {
+                            if (this.attackCooldown <= 0) {
+                                // 丟炸彈
+                                this.attackCooldown = 150; // 冷卻久一點
+                                AudioSys.enemyShoot();
+                                
+                                // 炸彈拋物線視覺
+                                const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color:0x000000}));
+                                bomb.position.copy(this.mesh.position);
+                                bomb.position.y += 2;
+                                game.scene.add(bomb);
+                                
+                                const targetPos = tower.mesh.position.clone();
+                                let t = 0;
+                                const animateBomb = setInterval(() => {
+                                    t += 0.1;
+                                    bomb.position.lerp(targetPos, 0.1);
+                                    bomb.position.y += Math.sin(t * Math.PI) * 0.5; // 簡單拋物線
+                                    
+                                    if (bomb.position.distanceTo(targetPos) < 1) {
+                                        clearInterval(animateBomb);
+                                        game.scene.remove(bomb);
+                                        // 瞬間摧毀塔
+                                        tower.takeDamage(999);
+                                    }
+                                }, 50);
+                            } else {
+                                this.attackCooldown--;
+                            }
+                            return 'ATTACKING_TOWER'; // 炸彈客專心拆塔
+                        }
+                    }
+                }
+
+                // 其他遠距攻擊邏輯 (攻擊動物)
                 if (this.type !== 'FLYING' && animals.length > 0) {
                     for(let animal of animals) {
                         const dist = this.mesh.position.distanceTo(animal.mesh.position);
-                        if (dist < 3) { 
+                        const range = this.attackRange * TILE_SIZE * 0.8; 
+                        
+                        if (dist < range) { 
                             if (this.attackCooldown <= 0) {
                                 animal.takeDamage(this.damage);
-                                this.attackCooldown = 30; 
+                                this.attackCooldown = 40; 
+                                AudioSys.enemyShoot();
+                                
+                                const laserGeo = new THREE.BufferGeometry().setFromPoints([
+                                    this.mesh.position.clone().add(new THREE.Vector3(0,1,0)),
+                                    animal.mesh.position.clone().add(new THREE.Vector3(0,1,0))
+                                ]);
+                                const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({color: 0xff0000, linewidth: 2}));
+                                game.scene.add(laser);
+                                setTimeout(() => game.scene.remove(laser), 100);
+
                                 this.mesh.position.y += 0.5;
                                 setTimeout(() => this.mesh.position.y -= 0.5, 100);
                             } else {
@@ -954,10 +982,15 @@
             }
 
             takeDamage(amt) {
-                this.hp -= amt;
+                const actualDamage = Math.max(1, amt - this.defense);
+                
+                this.hp -= actualDamage;
                 const pct = Math.max(0, this.hp / this.hpMax);
                 this.hpBar.scale.x = pct;
                 this.hpBar.material.color.setHex(pct > 0.5 ? 0x76ff03 : 0xff1744);
+
+                const pColor = actualDamage < amt ? 0xaaaaaa : this.color;
+                game.particles.push(new EffectParticle(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, pColor, 'hit', 0.5));
 
                 if (this.hp <= 0) {
                     game.money += this.reward;
@@ -975,6 +1008,7 @@
         class Tower {
             constructor(gx, gz, type) {
                 this.gx = gx; this.gz = gz; this.type = type; this.level = 1; this.cooldown = 0;
+                this.hp = 100; // 塔也有血量了
                 const data = TOWER_DATA[type];
                 this.mesh = new THREE.Group();
                 this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
@@ -1016,6 +1050,13 @@
             getRange() { return TOWER_DATA[this.type].range * (1 + 0.1*(this.level-1)); }
             getDamage() { return TOWER_DATA[this.type].damage * (1 + 0.4*(this.level-1)); }
             getRate() { return Math.max(5, TOWER_DATA[this.type].rate - (this.level * 2)); }
+
+            takeDamage(amount) {
+                this.hp -= amount;
+                if (this.hp <= 0) {
+                    game.removeTower(this);
+                }
+            }
 
             update(enemies) {
                 if (this.animator) this.animator();
@@ -1137,7 +1178,7 @@
         class EffectParticle {
             constructor(x, y, z, color, type='burst', scale=1) {
                 this.life = 1.0; this.mesh = new THREE.Group(); this.type = type;
-                const count = type === 'explode' ? 8 : 4;
+                const count = type === 'explode' ? 8 : (type === 'hit' ? 2 : 4);
                 for(let i=0; i<count; i++) {
                     const size = (Math.random() * 0.4 + 0.1) * scale;
                     const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial({color: color}));
