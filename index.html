@@ -110,13 +110,13 @@
 </head>
 <body>
 
-    <div class="diff-tag">極限模式: 拆塔炸彈客 | 18格狙擊手</div>
+    <div class="diff-tag">煉獄模式: 4路齊發 | 炸彈客軍團</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
     <div id="ui-layer">
         <div id="top-bar">
             <div class="stat">❤️ <span id="lives-txt">20</span></div>
-            <div class="stat money">💰 <span id="money-txt">150</span></div>
+            <div class="stat money">💰 <span id="money-txt">200</span></div>
             <div class="stat animals">🐰 倖存: <span id="animals-txt">3</span></div>
             <div class="stat">🌊 波次: <span id="wave-txt">1</span></div>
             <div class="stat">👾 敵人: <span id="enemies-txt">0</span></div>
@@ -159,7 +159,7 @@
                 <div class="tower-cost">$180</div>
             </div>
 
-            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">⚔️ 迎戰強敵</button>
+            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">⚔️ 死守防線</button>
         </div>
     </div>
 
@@ -200,7 +200,7 @@
             error() { this.play('triangle', 150, 0.2, 0.1); },
             animalDie() { this.play('sawtooth', 50, 0.8, 0.2); },
             enemyShoot() { this.play('square', 400, 0.1, 0.05); }, 
-            towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, // 塔被毀音效
+            towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, 
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -260,7 +260,7 @@
         class Game3D {
             constructor() {
                 this.lives = 20;
-                this.money = 150;
+                this.money = 200; // 初始金錢增加，應對高難度
                 this.wave = 1;
                 this.enemies = [];
                 this.towers = [];
@@ -454,27 +454,43 @@
 
                 const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
 
-                const count = 30 + Math.floor(this.wave * 5);
+                // 總波組數：10 + 波次*3
+                const groups = 10 + Math.floor(this.wave * 3); 
                 const hpMult = Math.pow(1.5, this.wave - 1); 
                 
-                let spawnDelayBase = Math.max(5, 30 - (this.wave * 2));
+                // 每組間隔很短
+                let spawnDelayBase = Math.max(12, 40 - (this.wave * 3));
 
-                for(let i=0; i<count; i++) {
-                    let type = 'NORMAL';
-                    const rand = Math.random();
+                for(let i=0; i<groups; i++) {
+                    // **每次生成 4 個敵人** (每條路各一個)
+                    for (let j = 0; j < 4; j++) {
+                        let type = 'NORMAL';
+                        const rand = Math.random();
 
-                    if (this.wave >= 1 && rand > 0.6) type = 'FAST';
-                    if (this.wave >= 2 && rand > 0.75) type = 'SHOOTER'; 
-                    if (this.wave >= 3 && rand > 0.85) type = 'TANK';
-                    if (this.wave >= 3 && rand > 0.92) type = 'BOMBER'; // 新增炸彈客
-                    if (this.wave >= 4 && Math.random() > 0.8) type = 'FLYING';
+                        // 調整機率：優先判定高級兵種
+                        // 炸彈客 (BOMBER) 大幅提升：第 2 波開始就有 20% 機率
+                        if (this.wave >= 5 && Math.random() > 0.85) {
+                             type = 'FLYING';
+                        } else if (this.wave >= 2 && Math.random() > 0.8) { 
+                             type = 'BOMBER';
+                        } else if (this.wave >= 3 && rand > 0.7) { // 坦克
+                             type = 'TANK';
+                        } else if (this.wave >= 2 && rand > 0.5) { // 射手
+                             type = 'SHOOTER';
+                        } else if (this.wave >= 1 && rand > 0.3) {
+                             type = 'FAST';
+                        }
 
-                    let path = activePaths[0];
-                    if (type !== 'FLYING') {
-                        path = activePaths[Math.floor(Math.random() * activePaths.length)];
+                        let path = activePaths[j]; // 強制分配 0,1,2,3 四條路
+                        
+                        if (type === 'FLYING') {
+                            // 飛行單位路徑隨機
+                            path = activePaths[Math.floor(Math.random() * activePaths.length)];
+                        }
+                        
+                        // 將 4 個敵人同時推入隊列 (稍微錯開 2 幀避免重疊完全一致)
+                        this.spawnQueue.push({ type, hpMult, path, delay: (i * spawnDelayBase) + (j * 2) });
                     }
-                    
-                    this.spawnQueue.push({ type, hpMult, path, delay: i * spawnDelayBase });
                 }
             }
 
@@ -505,7 +521,7 @@
 
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     const e = this.enemies[i];
-                    const status = e.update(this.animals, this.towers); // 傳入塔列表供炸彈客攻擊
+                    const status = e.update(this.animals, this.towers); 
                     
                     if (status === 'REACHED') {
                         this.lives--;
@@ -542,7 +558,7 @@
             endWave() {
                 this.waveActive = false;
                 this.wave++;
-                this.money += 150 + (this.wave * 25); 
+                this.money += 200 + (this.wave * 30); 
                 document.getElementById('next-wave-btn').disabled = false;
                 AudioSys.build();
             }
@@ -569,11 +585,9 @@
                 const idx = this.towers.indexOf(t);
                 if (idx > -1) this.towers.splice(idx, 1);
                 
-                // 爆炸特效
                 game.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xff0000, 'explode', 2));
                 AudioSys.towerDestroy();
                 
-                // UI 提示
                 const msg = document.getElementById('tower-destroyed-msg');
                 msg.style.opacity = 1;
                 setTimeout(() => msg.style.opacity = 0, 1500);
