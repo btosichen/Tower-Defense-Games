@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 毀滅倒數</title>
+    <title>3D 極限塔防 - 絕望深淵</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
-            --accent: #d50000;
-            --bg-ui: rgba(255, 255, 255, 0.9);
-            --text-color: #333;
+            --accent: #b71c1c; /* 血紅色 */
+            --bg-ui: rgba(20, 20, 20, 0.9); /* 深色 UI，更有壓迫感 */
+            --text-color: #eee;
         }
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #87CEEB; color: var(--text-color); }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #263238; color: var(--text-color); }
         
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -23,21 +23,21 @@
             display: flex; gap: 25px; background: var(--bg-ui); padding: 15px 30px;
             border-radius: 50px; pointer-events: auto; border-bottom: 4px solid var(--accent);
             align-self: center; font-weight: bold; font-size: 1.3em;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.15); color: #444;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5); color: #fff;
             position: relative;
         }
         .stat { display: flex; align-items: center; gap: 8px; }
-        .stat span { color: #d32f2f; }
-        .stat.money span { color: #f57f17; }
-        .stat.animals span { color: #2979ff; }
+        .stat span { color: #ff5252; }
+        .stat.money span { color: #ffd740; }
+        .stat.animals span { color: #40c4ff; }
 
         #bgm-toggle {
-            background: #eee; border: none; border-radius: 50%; width: 40px; height: 40px;
+            background: #444; color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px;
             cursor: pointer; font-size: 1.2em; display: flex; justify-content: center; align-items: center;
             transition: background 0.2s; margin-left: 10px;
         }
-        #bgm-toggle:hover { background: #ddd; }
-        #bgm-toggle.active { background: #b2ff59; color: #33691e; }
+        #bgm-toggle:hover { background: #666; }
+        #bgm-toggle.active { background: #64dd17; color: #000; }
 
         #bottom-controls {
             display: flex; justify-content: center; align-items: flex-end; gap: 15px;
@@ -46,77 +46,76 @@
 
         .tower-card {
             background: var(--bg-ui); width: 100px; padding: 10px; border-radius: 15px;
-            text-align: center; cursor: pointer; transition: all 0.2s; border: 3px solid #fff;
-            position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            text-align: center; cursor: pointer; transition: all 0.2s; border: 2px solid #555;
+            position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .tower-card:hover { transform: translateY(-10px); border-color: var(--accent); }
-        .tower-card.active { border-color: var(--accent); background: #ffebee; transform: translateY(-10px); }
+        .tower-card.active { border-color: var(--accent); background: #37474f; transform: translateY(-10px); }
         
         .tower-icon { 
             width: 50px; height: 50px; margin: 0 auto 5px; border-radius: 12px; 
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.1); display: flex; 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5); display: flex; 
             justify-content: center; align-items: center; font-size: 24px;
-            border: 2px solid rgba(0,0,0,0.05);
+            border: 2px solid rgba(255,255,255,0.1);
         }
-        .tower-cost { color: #e65100; font-weight: bold; font-size: 0.9em; }
-        .tower-name { font-size: 0.8em; margin-bottom: 2px; color: #555; }
+        .tower-cost { color: #ffab40; font-weight: bold; font-size: 0.9em; }
+        .tower-name { font-size: 0.8em; margin-bottom: 2px; color: #bbb; }
 
         .action-btn {
-            background: linear-gradient(45deg, #d50000, #ff1744); color: white; border: none;
+            background: linear-gradient(45deg, #b71c1c, #d50000); color: white; border: none;
             padding: 15px 40px; border-radius: 50px; font-size: 1.2em; font-weight: bold;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(213, 0, 0, 0.4);
+            cursor: pointer; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
             transition: transform 0.1s; pointer-events: auto; height: 80px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
         .action-btn:active { transform: scale(0.95); }
-        .action-btn:disabled { background: #ccc; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
+        .action-btn:disabled { background: #555; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
 
         #upgrade-panel {
             position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
             background: var(--bg-ui); padding: 20px; border-radius: 20px; width: 240px;
-            pointer-events: auto; display: none; border: 2px solid #fff;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            pointer-events: auto; display: none; border: 2px solid #777;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
         }
-        .up-info { margin-bottom: 15px; line-height: 1.6; font-size: 0.95em; color: #555; }
-        .up-val { color: #0277bd; font-weight: bold; float: right; }
-        .up-btn { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .btn-upgrade { background: #43a047; } .btn-upgrade:hover { background: #2e7d32; }
-        .btn-sell { background: #e53935; } .btn-sell:hover { background: #c62828; }
-        .btn-close { background: #78909c; }
+        .up-info { margin-bottom: 15px; line-height: 1.6; font-size: 0.95em; color: #ccc; }
+        .up-val { color: #40c4ff; font-weight: bold; float: right; }
+        .up-btn { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .btn-upgrade { background: #2e7d32; } .btn-upgrade:hover { background: #1b5e20; }
+        .btn-sell { background: #c62828; } .btn-sell:hover { background: #b71c1c; }
+        .btn-close { background: #607d8b; }
 
         #game-over {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); display: none;
+            background: rgba(0,0,0,0.95); display: none;
             justify-content: center; align-items: center; flex-direction: column;
             color: white; z-index: 999; pointer-events: auto; backdrop-filter: blur(5px);
         }
-        h1 { margin: 0; font-size: 5em; color: #ffeb3b; text-shadow: 0 0 20px #ff6d00; text-transform: uppercase; letter-spacing: 5px; }
+        h1 { margin: 0; font-size: 5em; color: #ff5252; text-shadow: 0 0 30px #b71c1c; text-transform: uppercase; letter-spacing: 5px; }
         
         .diff-tag {
             position: absolute; top: 10px; left: 10px;
-            background: rgba(255,255,255,0.8); color: #d50000;
+            background: rgba(0,0,0,0.8); color: #ff5252;
             padding: 5px 15px; border-radius: 20px; font-size: 0.9em;
-            pointer-events: auto; font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            pointer-events: auto; font-weight: bold; border: 1px solid #ff5252;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
         
-        /* 塔被摧毀的提示 */
         #tower-destroyed-msg {
             position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
-            color: red; font-weight: bold; font-size: 2em; text-shadow: 0 0 10px black;
-            opacity: 0; pointer-events: none; transition: opacity 0.5s;
+            color: #ff1744; font-weight: bold; font-size: 3em; text-shadow: 0 0 20px black;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 900;
         }
     </style>
 </head>
 <body>
 
-    <div class="diff-tag">煉獄模式: 4路齊發 | 炸彈客軍團</div>
+    <div class="diff-tag">絕望模式: 6倍敵人 | 4倍炸彈 | 短手防禦 | 天價雷射</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
     <div id="ui-layer">
         <div id="top-bar">
             <div class="stat">❤️ <span id="lives-txt">20</span></div>
-            <div class="stat money">💰 <span id="money-txt">200</span></div>
+            <div class="stat money">💰 <span id="money-txt">250</span></div>
             <div class="stat animals">🐰 倖存: <span id="animals-txt">3</span></div>
             <div class="stat">🌊 波次: <span id="wave-txt">1</span></div>
             <div class="stat">👾 敵人: <span id="enemies-txt">0</span></div>
@@ -125,7 +124,7 @@
 
         <!-- 升級面板 -->
         <div id="upgrade-panel">
-            <h2 style="margin:0 0 15px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
+            <h2 style="margin:0 0 15px 0; color:#fff; border-bottom:2px solid #ff5252; padding-bottom:5px;" id="up-name">塔名稱</h2>
             <div class="up-info">
                 等級: <span id="up-level" class="up-val">1</span><br>
                 傷害: <span id="up-dmg" class="up-val">10</span><br>
@@ -139,27 +138,27 @@
 
         <div id="bottom-controls">
             <div class="tower-card" onclick="game.selectBuildType('ARCHER')" id="btn-archer">
-                <div class="tower-icon" style="background: #fff9c4; color:#fbc02d;">🏹</div>
-                <div class="tower-name">箭塔 (單體)</div>
+                <div class="tower-icon" style="background: #fbc02d; color:#000;">🏹</div>
+                <div class="tower-name">箭塔 (短距)</div>
                 <div class="tower-cost">$40</div>
             </div>
             <div class="tower-card" onclick="game.selectBuildType('ICE')" id="btn-ice">
-                <div class="tower-icon" style="background: #e1f5fe; color:#039be5;">❄️</div>
-                <div class="tower-name">冰塔 (緩速)</div>
+                <div class="tower-icon" style="background: #039be5; color:#fff;">❄️</div>
+                <div class="tower-name">冰塔 (短距)</div>
                 <div class="tower-cost">$70</div>
             </div>
             <div class="tower-card" onclick="game.selectBuildType('FIRE')" id="btn-fire">
-                <div class="tower-icon" style="background: #ffebee; color:#e53935;">🔥</div>
-                <div class="tower-name">火塔 (範圍)</div>
+                <div class="tower-icon" style="background: #d32f2f; color:#fff;">🔥</div>
+                <div class="tower-name">火塔 (極短)</div>
                 <div class="tower-cost">$120</div>
             </div>
             <div class="tower-card" onclick="game.selectBuildType('LASER')" id="btn-laser">
-                <div class="tower-icon" style="background: #f3e5f5; color:#8e24aa;">⚡</div>
-                <div class="tower-name">雷射 (高傷)</div>
-                <div class="tower-cost">$180</div>
+                <div class="tower-icon" style="background: #7b1fa2; color:#fff;">⚡</div>
+                <div class="tower-name">雷射 (全圖)</div>
+                <div class="tower-cost">$540</div>
             </div>
 
-            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">⚔️ 死守防線</button>
+            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">☠️ 接受挑戰</button>
         </div>
     </div>
 
@@ -219,7 +218,7 @@
                 if (this.bgmInterval) return;
                 const melody = [523,0,523,0,783,0,783,0,880,0,880,0,783,0,0,0,698,0,698,0,659,0,659,0,587,0,587,0,523,0,0,0];
                 const bass = [261,261,392,392,440,440,392,392,349,349,329,329,293,293,261,261];
-                const tempo = 170; 
+                const tempo = 160; 
 
                 this.bgmInterval = setInterval(() => {
                     if (this.isBgmMuted) return;
@@ -250,17 +249,18 @@
         const PATH_SOUTH = [{x:10, z:14}, {x:10, z:8}, {x:16, z:8}, {x:16, z:12}, {x:18, z:12}];
         const PATH_EAST = [{x:19, z:4}, {x:16, z:4}, {x:16, z:8}, {x:18, z:8}, {x:18, z:12}];
 
+        // --- 調整：射程減半，雷射塔價格3倍 ---
         const TOWER_DATA = {
-            ARCHER: { cost: 40, range: 7, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' },
-            ICE:    { cost: 70, range: 6, damage: 4,  rate: 45, color: 0x4fc3f7, name: "冰塔", type:'proj' },
-            FIRE:   { cost: 120, range: 5, damage: 15, rate: 70, color: 0xff7043, name: "火塔", type:'aoe' },
-            LASER:  { cost: 180, range: 16, damage: 2, rate: 0,   color: 0xe040fb, name: "雷射塔", type:'laser' } 
+            ARCHER: { cost: 40, range: 3.5, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' }, // 原 7 -> 3.5
+            ICE:    { cost: 70, range: 3, damage: 4,  rate: 45, color: 0x4fc3f7, name: "冰塔", type:'proj' },   // 原 6 -> 3
+            FIRE:   { cost: 120, range: 2.5, damage: 15, rate: 70, color: 0xff7043, name: "火塔", type:'aoe' }, // 原 5 -> 2.5
+            LASER:  { cost: 540, range: 16, damage: 2, rate: 0,   color: 0xe040fb, name: "雷射塔", type:'laser' } // 原 180 -> 540
         };
 
         class Game3D {
             constructor() {
                 this.lives = 20;
-                this.money = 200; // 初始金錢增加，應對高難度
+                this.money = 250; // 稍微增加初始金錢以應對天價雷射
                 this.wave = 1;
                 this.enemies = [];
                 this.towers = [];
@@ -273,8 +273,8 @@
                 this.clock = new THREE.Clock();
 
                 this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0x87CEEB); 
-                this.scene.fog = new THREE.Fog(0x87CEEB, 60, 200);
+                this.scene.background = new THREE.Color(0x263238); // 深色背景配合高難度氛圍
+                this.scene.fog = new THREE.Fog(0x263238, 60, 200);
 
                 const aspect = window.innerWidth / window.innerHeight;
                 this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
@@ -287,15 +287,15 @@
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 document.body.appendChild(this.renderer.domElement);
 
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
                 this.scene.add(ambientLight);
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
                 dirLight.position.set(50, 100, 50);
                 dirLight.castShadow = true;
                 dirLight.shadow.mapSize.width = 2048;
                 dirLight.shadow.mapSize.height = 2048;
                 this.scene.add(dirLight);
-                const spotLight = new THREE.SpotLight(0xffe0b2, 0.4);
+                const spotLight = new THREE.SpotLight(0xff5252, 0.4);
                 spotLight.position.set(0, 50, 0);
                 this.scene.add(spotLight);
 
@@ -337,15 +337,15 @@
 
             createMap() {
                 const floorGeo = new THREE.PlaneGeometry(GRID_W * TILE_SIZE * 2, GRID_H * TILE_SIZE * 2);
-                const floorMat = new THREE.MeshLambertMaterial({ color: 0x66bb6a });
+                const floorMat = new THREE.MeshLambertMaterial({ color: 0x455a64 }); // 深灰地
                 const floor = new THREE.Mesh(floorGeo, floorMat);
                 floor.rotation.x = -Math.PI / 2;
                 floor.position.set(GRID_W*TILE_SIZE/2 - TILE_SIZE/2, -0.2, GRID_H*TILE_SIZE/2 - TILE_SIZE/2);
                 floor.receiveShadow = true;
                 this.scene.add(floor);
 
-                const matEmpty = new THREE.MeshLambertMaterial({ color: 0x81c784 });
-                const matPath = new THREE.MeshLambertMaterial({ color: 0xffe0b2 });
+                const matEmpty = new THREE.MeshLambertMaterial({ color: 0x546e7a });
+                const matPath = new THREE.MeshLambertMaterial({ color: 0x90a4ae });
                 
                 for(let x=0; x<GRID_W; x++) {
                     this.grid[x] = [];
@@ -368,23 +368,23 @@
                 }
 
                 const endP = {x: 18, z: 12};
-                const endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
+                const endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xff5252}));
                 endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
                 endBase.castShadow = true;
                 this.scene.add(endBase);
                 
                 const startPoints = [PATH_WEST[0], PATH_NORTH[0], PATH_SOUTH[0], PATH_EAST[0]];
                 startPoints.forEach(start => {
-                    const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x76ff03}));
+                    const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x69f0ae}));
                     startM.position.set(start.x * TILE_SIZE, 0.5, start.z * TILE_SIZE);
                     this.scene.add(startM);
                 });
             }
 
             createDecorations() {
-                const trunkMat = new THREE.MeshLambertMaterial({color: 0x5d4037});
-                const leavesMat = new THREE.MeshLambertMaterial({color: 0x2e7d32});
-                const flowerColors = [0xffeb3b, 0xff4081, 0x7c4dff, 0xffffff];
+                const trunkMat = new THREE.MeshLambertMaterial({color: 0x3e2723});
+                const leavesMat = new THREE.MeshLambertMaterial({color: 0x263238});
+                const flowerColors = [0xff5252, 0xff4081];
 
                 for(let x=0; x<GRID_W; x++) {
                     for(let z=0; z<GRID_H; z++) {
@@ -454,42 +454,43 @@
 
                 const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
 
-                // 總波組數：10 + 波次*3
+                // Groups count
                 const groups = 10 + Math.floor(this.wave * 3); 
                 const hpMult = Math.pow(1.5, this.wave - 1); 
                 
-                // 每組間隔很短
-                let spawnDelayBase = Math.max(12, 40 - (this.wave * 3));
+                let spawnDelayBase = Math.max(10, 35 - (this.wave * 2));
 
                 for(let i=0; i<groups; i++) {
-                    // **每次生成 4 個敵人** (每條路各一個)
-                    for (let j = 0; j < 4; j++) {
+                    const baseDelay = i * spawnDelayBase;
+
+                    // --- 1. 標準敵人波 (每波增加至6隻) ---
+                    for (let j = 0; j < 6; j++) {
                         let type = 'NORMAL';
                         const rand = Math.random();
 
-                        // 調整機率：優先判定高級兵種
-                        // 炸彈客 (BOMBER) 大幅提升：第 2 波開始就有 20% 機率
-                        if (this.wave >= 5 && Math.random() > 0.85) {
-                             type = 'FLYING';
-                        } else if (this.wave >= 2 && Math.random() > 0.8) { 
-                             type = 'BOMBER';
-                        } else if (this.wave >= 3 && rand > 0.7) { // 坦克
-                             type = 'TANK';
-                        } else if (this.wave >= 2 && rand > 0.5) { // 射手
-                             type = 'SHOOTER';
-                        } else if (this.wave >= 1 && rand > 0.3) {
-                             type = 'FAST';
-                        }
+                        if (this.wave >= 1 && rand > 0.5) type = 'FAST';
+                        if (this.wave >= 2 && rand > 0.7) type = 'SHOOTER'; 
+                        if (this.wave >= 3 && rand > 0.8) type = 'TANK';
+                        if (this.wave >= 4 && Math.random() > 0.85) type = 'FLYING';
 
-                        let path = activePaths[j]; // 強制分配 0,1,2,3 四條路
+                        // 6隻敵人均分到4條路上 (0,1,2,3,0,1...)
+                        let path = activePaths[j % 4]; 
+                        if (type === 'FLYING') path = activePaths[Math.floor(Math.random() * 4)];
                         
-                        if (type === 'FLYING') {
-                            // 飛行單位路徑隨機
-                            path = activePaths[Math.floor(Math.random() * activePaths.length)];
+                        this.spawnQueue.push({ type, hpMult, path, delay: baseDelay + (j * 3) });
+                    }
+
+                    // --- 2. 炸彈客小隊 (以4的倍數出現) ---
+                    // 15% 機率觸發炸彈客小隊襲擊
+                    if (this.wave >= 2 && Math.random() > 0.85) {
+                        for(let b=0; b<4; b++) {
+                             this.spawnQueue.push({ 
+                                 type: 'BOMBER', 
+                                 hpMult, 
+                                 path: activePaths[b % 4], // 4個方向各來一隻
+                                 delay: baseDelay + 15 + (b * 2) // 稍微延後出現
+                             });
                         }
-                        
-                        // 將 4 個敵人同時推入隊列 (稍微錯開 2 幀避免重疊完全一致)
-                        this.spawnQueue.push({ type, hpMult, path, delay: (i * spawnDelayBase) + (j * 2) });
                     }
                 }
             }
@@ -841,9 +842,8 @@
                     geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8);
                     this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; 
                     this.damage = 8; 
-                    // --- 調整：18格超遠射程 ---
                     this.attackRange = 18; 
-                } else if (type === 'BOMBER') { // 新增：炸彈客
+                } else if (type === 'BOMBER') {
                     geo = new THREE.IcosahedronGeometry(1.8, 1);
                     this.color = 0x212121; // 黑色
                     this.speed = 0.05; // 慢速
