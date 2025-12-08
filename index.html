@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 快樂農場版 (魔王突襲)</title>
+    <title>3D 極限塔防 - 農場保衛戰</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
@@ -133,6 +133,7 @@
             position: absolute; color: #ffd740; font-weight: bold; font-size: 1.5em; 
             text-shadow: 0 0 5px black; pointer-events: none; animation: floatUp 1s forwards;
         }
+        .float-text.bad { color: #ff1744; font-size: 1.8em; }
         @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
         
         /* 暫停遮罩 */
@@ -146,7 +147,7 @@
 </head>
 <body>
 
-    <div class="diff-tag">魔王突襲: <5隻時護衛傳送 | 塔被摧毀警告</div>
+    <div class="diff-tag">任務: 抓菜蟲! | 1秒內不採收就被吃 | 魔王單挑</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
     <div id="pause-overlay">已暫停</div>
 
@@ -268,7 +269,8 @@
             towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, 
             heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
             harvest() { this.play('sine', 1000, 0.1, 0.1); setTimeout(()=>this.play('sine', 1500, 0.2, 0.1), 100); }, 
-            teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); }, // 傳送音效
+            teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); }, 
+            squish() { this.play('square', 200, 0.1, 0.1, 'slide'); }, // 抓蟲音效
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -336,6 +338,7 @@
                 this.money = 900; 
                 this.wave = 1;
                 this.enemies = [];
+                this.worms = []; // 菜蟲列表
                 this.towers = [];
                 this.plants = []; 
                 this.projectiles = [];
@@ -563,13 +566,11 @@
                 return false;
             }
 
-            // --- 隨機空地獲取 ---
             getRandomFreeTile() {
                 const freeTiles = [];
                 for(let x=0; x<GRID_W; x++) {
                     for(let z=0; z<GRID_H; z++) {
                         const cell = this.grid[x][z];
-                        // 條件：是空地、沒有塔、沒有植物、沒有裝飾
                         if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
                             freeTiles.push({x, z});
                         }
@@ -579,8 +580,42 @@
                     const t = freeTiles[Math.floor(Math.random() * freeTiles.length)];
                     return { x: t.x * TILE_SIZE, z: t.z * TILE_SIZE };
                 }
-                // 如果沒有空地，則在隨機位置（可能重疊，避免崩潰）
                 return { x: Math.random() * GRID_W * TILE_SIZE, z: Math.random() * GRID_H * TILE_SIZE };
+            }
+
+            // --- 菜蟲生成系統 ---
+            spawnWorm() {
+                const startPos = this.getRandomFreeTile();
+                const worm = new Worm(startPos.x, startPos.z);
+                this.worms.push(worm);
+                this.scene.add(worm.mesh);
+            }
+
+            catchWorm(worm) {
+                this.scene.remove(worm.mesh);
+                const idx = this.worms.indexOf(worm);
+                if (idx > -1) this.worms.splice(idx, 1);
+                
+                // 獎勵
+                this.money += 20;
+                this.updateUI();
+                AudioSys.squish();
+                this.particles.push(new EffectParticle(worm.mesh.position.x, 1, worm.mesh.position.z, 0x76ff03, 'burst', 0.5));
+                
+                // 浮動文字
+                const text = document.createElement('div');
+                text.className = 'float-text';
+                text.style.color = '#76ff03';
+                text.innerText = `抓到了! +$20`;
+                const vec = worm.mesh.position.clone();
+                vec.y += 2;
+                vec.project(this.camera);
+                const x = (vec.x * .5 + .5) * window.innerWidth;
+                const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                text.style.left = `${x}px`;
+                text.style.top = `${y}px`;
+                document.body.appendChild(text);
+                setTimeout(() => text.remove(), 1000);
             }
 
             nextWave() {
@@ -627,25 +662,17 @@
                 const bossPath = activePaths[Math.floor(Math.random() * 4)]; 
                 const hpMult = Math.pow(1.5, this.wave - 1);
 
-                // 魔王本體
                 this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
                 
-                // 護衛隊邏輯：如果場上敵人 < 5 (玩家清很快)，護衛隊突襲(隨機空地)
                 const isAmbush = this.enemies.length < 5;
-                
-                // 4 隻護衛
                 const guards = ['BOMBER', 'BOMBER', 'SHOOTER', 'SHOOTER'];
                 guards.forEach((gType, idx) => {
                     let opts = { type: gType, hpMult, delay: baseDelay + 5 + (idx * 3) };
-                    
                     if (isAmbush) {
-                        // 突襲模式：隨機空地生成，不走路
                         opts.spawnLoc = this.getRandomFreeTile();
                     } else {
-                        // 正常模式：跟隨魔王
                         opts.path = bossPath;
                     }
-                    
                     this.spawnQueue.push(opts);
                 });
             }
@@ -658,13 +685,11 @@
                     return;
                 }
                 this.spawnQueue.shift();
-                // 傳遞 next 物件本身，因為它可能包含 spawnLoc
                 const enemy = new Enemy(next);
                 this.enemies.push(enemy);
                 this.scene.add(enemy.mesh);
                 
                 if (enemy.isStationary) {
-                    // 傳送特效
                     AudioSys.teleport();
                     this.particles.push(new EffectParticle(enemy.mesh.position.x, 2, enemy.mesh.position.z, 0x9c27b0, 'burst', 2));
                 }
@@ -685,7 +710,19 @@
                     }
                 }
 
+                // 隨機生成菜蟲 (機率與植物數量成正比)
+                if (Math.random() < 0.005 + (this.plants.length * 0.002)) {
+                    if (this.worms.length < 5 + this.plants.length) { // 限制總蟲數
+                        this.spawnWorm();
+                    }
+                }
+
                 this.animals.forEach(a => a.update());
+
+                // 更新菜蟲
+                for (let i = this.worms.length - 1; i >= 0; i--) {
+                    this.worms[i].update(this.plants);
+                }
 
                 for (let i = this.plants.length - 1; i >= 0; i--) {
                     this.plants[i].update();
@@ -836,6 +873,21 @@
             onClick(e) {
                 if (e.target.closest('button') || e.target.closest('.tower-card')) return;
 
+                // 優先檢測點擊菜蟲
+                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
+                if (wormIntersects.length > 0) {
+                    // 找到對應的 worm 物件
+                    const clickedMesh = wormIntersects[0].object.parent; // mesh is Group or part of Group
+                    const worm = this.worms.find(w => w.mesh === clickedMesh || w.mesh.children.includes(clickedMesh));
+                    if (worm) {
+                        this.catchWorm(worm);
+                        return;
+                    }
+                }
+
                 const pos = this.getGridPos(e);
                 if (!pos || pos.x < 0 || pos.x >= GRID_W || pos.z < 0 || pos.z >= GRID_H) return;
                 const cell = this.grid[pos.x][pos.z];
@@ -982,6 +1034,111 @@
             }
         }
 
+        // ==========================================
+        // 菜蟲類別 (新)
+        // ==========================================
+        class Worm {
+            constructor(x, z) {
+                this.mesh = new THREE.Group();
+                // 身體 (3個小球)
+                const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03}));
+                const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x64dd17})); seg2.position.z = -0.4;
+                const seg3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03})); seg3.position.z = -0.8;
+                // 頭 (稍大)
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshLambertMaterial({color: 0xccff90})); head.position.z = 0.4; head.position.y = 0.1;
+                // 眼睛
+                const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeL.position.set(-0.15, 0.2, 0.7);
+                const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeR.position.set(0.15, 0.2, 0.7);
+                
+                this.mesh.add(seg1, seg2, seg3, head, eyeL, eyeR);
+                this.mesh.position.set(x, 0.3, z);
+                this.mesh.castShadow = true;
+                
+                this.targetPlant = null;
+                this.speed = 0.03; // 爬得慢
+                this.eatingTimer = 0; // 倒數計時
+            }
+
+            update(plants) {
+                // 如果沒有目標，找最近的植物
+                if (!this.targetPlant || !plants.includes(this.targetPlant)) {
+                    let minDist = Infinity;
+                    let nearest = null;
+                    for (let p of plants) {
+                        const d = this.mesh.position.distanceTo(p.mesh.position);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearest = p;
+                        }
+                    }
+                    this.targetPlant = nearest;
+                }
+
+                if (this.targetPlant) {
+                    const targetPos = this.targetPlant.mesh.position;
+                    const dist = this.mesh.position.distanceTo(targetPos);
+
+                    // 移動邏輯
+                    if (dist > 1.0) {
+                        this.mesh.lookAt(targetPos);
+                        this.mesh.translateZ(this.speed);
+                        // 蠕動動畫
+                        this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.01) * 0.1;
+                    } else {
+                        // 抵達植物
+                        // 檢查植物是否成熟
+                        if (this.targetPlant.growth >= this.targetPlant.maxGrowth) {
+                            // 開始吃
+                            this.eatingTimer++;
+                            // 視覺警告 (變紅)
+                            this.mesh.children.forEach(c => c.material.color.setHex(0xff0000));
+                            
+                            // 60幀 = 約1秒
+                            if (this.eatingTimer > 60) {
+                                this.eatPlant();
+                            }
+                        } else {
+                            // 等待成熟，恢復綠色
+                            this.mesh.children[0].material.color.setHex(0x76ff03); 
+                            this.eatingTimer = 0;
+                        }
+                    }
+                }
+            }
+
+            eatPlant() {
+                if (this.targetPlant) {
+                    game.scene.remove(this.targetPlant.mesh);
+                    game.grid[this.targetPlant.gx][this.targetPlant.gz].plant = null;
+                    game.plants = game.plants.filter(p => p !== this.targetPlant);
+                    
+                    // 特效：植物被吃掉
+                    game.particles.push(new EffectParticle(this.targetPlant.mesh.position.x, 1, this.targetPlant.mesh.position.z, 0x8bc34a, 'burst', 1.0));
+                    
+                    // 浮動文字提示
+                    const text = document.createElement('div');
+                    text.className = 'float-text bad';
+                    text.innerText = "被吃掉了!";
+                    const vec = this.mesh.position.clone();
+                    vec.y += 3;
+                    vec.project(game.camera);
+                    const x = (vec.x * .5 + .5) * window.innerWidth;
+                    const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                    text.style.left = `${x}px`;
+                    text.style.top = `${y}px`;
+                    document.body.appendChild(text);
+                    setTimeout(() => text.remove(), 1000);
+
+                    // 吃完後，蟲消失 (心滿意足離開)
+                    game.scene.remove(this.mesh);
+                    game.worms = game.worms.filter(w => w !== this);
+                }
+            }
+        }
+
+        // ==========================================
+        // 植物類別 (微調)
+        // ==========================================
         class Plant {
             constructor(gx, gz, type) {
                 this.gx = gx; this.gz = gz; this.type = type;
@@ -1046,6 +1203,7 @@
             }
 
             tryHarvest() {
+                // 如果正被菜蟲吃(紅色警戒狀態)，不一定能採收成功，但這版本允許採收以拯救作物
                 if (this.growth >= this.maxGrowth) {
                     game.money += this.data.sell;
                     AudioSys.harvest();
