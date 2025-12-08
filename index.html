@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 快樂農場版 (魔王接力)</title>
+    <title>3D 極限塔防 - 快樂農場版 (魔王突襲)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
@@ -146,7 +146,7 @@
 </head>
 <body>
 
-    <div class="diff-tag">極限塔防: 魔王接力戰 | 種田賺錢 | 可暫停</div>
+    <div class="diff-tag">魔王突襲: <5隻時護衛傳送 | 塔被摧毀警告</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
     <div id="pause-overlay">已暫停</div>
 
@@ -268,6 +268,7 @@
             towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, 
             heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
             harvest() { this.play('sine', 1000, 0.1, 0.1); setTimeout(()=>this.play('sine', 1500, 0.2, 0.1), 100); }, 
+            teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); }, // 傳送音效
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -344,8 +345,8 @@
                 this.waveActive = false;
                 this.spawnQueue = [];
                 this.clock = new THREE.Clock();
-                this.isPaused = false; // 暫停狀態
-                this.bossesRemainingInWave = 0; // 當前波次剩餘未出場的魔王數
+                this.isPaused = false; 
+                this.bossesRemainingInWave = 0; 
 
                 this.scene = new THREE.Scene();
                 this.scene.background = new THREE.Color(0x4fc3f7); 
@@ -410,7 +411,6 @@
                 this.animate();
             }
 
-            // 新增：切換暫停
             togglePause() {
                 this.isPaused = !this.isPaused;
                 const btn = document.getElementById('pause-btn');
@@ -563,6 +563,26 @@
                 return false;
             }
 
+            // --- 隨機空地獲取 ---
+            getRandomFreeTile() {
+                const freeTiles = [];
+                for(let x=0; x<GRID_W; x++) {
+                    for(let z=0; z<GRID_H; z++) {
+                        const cell = this.grid[x][z];
+                        // 條件：是空地、沒有塔、沒有植物、沒有裝飾
+                        if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
+                            freeTiles.push({x, z});
+                        }
+                    }
+                }
+                if (freeTiles.length > 0) {
+                    const t = freeTiles[Math.floor(Math.random() * freeTiles.length)];
+                    return { x: t.x * TILE_SIZE, z: t.z * TILE_SIZE };
+                }
+                // 如果沒有空地，則在隨機位置（可能重疊，避免崩潰）
+                return { x: Math.random() * GRID_W * TILE_SIZE, z: Math.random() * GRID_H * TILE_SIZE };
+            }
+
             nextWave() {
                 if(this.waveActive) return;
                 this.waveActive = true;
@@ -573,7 +593,6 @@
                 const hpMult = Math.pow(1.5, this.wave - 1); 
                 let spawnDelayBase = Math.max(10, 35 - (this.wave * 2));
 
-                // 1. 一般小怪與炸彈客的排程
                 for(let i=0; i<groups; i++) {
                     const baseDelay = i * spawnDelayBase;
                     for (let j = 0; j < 6; j++) {
@@ -588,7 +607,6 @@
                         if (type === 'FLYING') path = activePaths[Math.floor(Math.random() * 4)];
                         this.spawnQueue.push({ type, hpMult, path, delay: baseDelay + (j * 3) });
                     }
-                    // 炸彈客小隊
                     if (this.wave >= 2 && Math.random() > 0.85) {
                         for(let b=0; b<4; b++) {
                              this.spawnQueue.push({ type: 'BOMBER', hpMult, path: activePaths[b % 4], delay: baseDelay + 15 + (b * 2) });
@@ -596,29 +614,40 @@
                     }
                 }
 
-                // 2. 魔王接力機制：初始化魔王數量，但只先召喚第一隻
-                this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4); // 本波總魔王數 1-4
-                this.spawnBossSequence(groups * spawnDelayBase); // 在小怪差不多出完後開始出魔王
+                this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4); 
+                this.spawnBossSequence(groups * spawnDelayBase); 
             }
 
-            // 新增：召喚單一魔王及其護衛
             spawnBossSequence(baseDelay = 0) {
                 if (this.bossesRemainingInWave <= 0) return;
                 
-                this.bossesRemainingInWave--; // 扣除一隻待命魔王
+                this.bossesRemainingInWave--; 
                 
                 const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
-                const bossPath = activePaths[Math.floor(Math.random() * 4)]; // 隨機路口
+                const bossPath = activePaths[Math.floor(Math.random() * 4)]; 
                 const hpMult = Math.pow(1.5, this.wave - 1);
 
                 // 魔王本體
                 this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
                 
-                // 護衛隊 (跟隨魔王)
-                this.spawnQueue.push({ type: 'BOMBER', hpMult, path: bossPath, delay: baseDelay + 5 });
-                this.spawnQueue.push({ type: 'BOMBER', hpMult, path: bossPath, delay: baseDelay + 8 });
-                this.spawnQueue.push({ type: 'SHOOTER', hpMult, path: bossPath, delay: baseDelay + 12 });
-                this.spawnQueue.push({ type: 'SHOOTER', hpMult, path: bossPath, delay: baseDelay + 15 });
+                // 護衛隊邏輯：如果場上敵人 < 5 (玩家清很快)，護衛隊突襲(隨機空地)
+                const isAmbush = this.enemies.length < 5;
+                
+                // 4 隻護衛
+                const guards = ['BOMBER', 'BOMBER', 'SHOOTER', 'SHOOTER'];
+                guards.forEach((gType, idx) => {
+                    let opts = { type: gType, hpMult, delay: baseDelay + 5 + (idx * 3) };
+                    
+                    if (isAmbush) {
+                        // 突襲模式：隨機空地生成，不走路
+                        opts.spawnLoc = this.getRandomFreeTile();
+                    } else {
+                        // 正常模式：跟隨魔王
+                        opts.path = bossPath;
+                    }
+                    
+                    this.spawnQueue.push(opts);
+                });
             }
 
             spawnEnemy() {
@@ -629,15 +658,21 @@
                     return;
                 }
                 this.spawnQueue.shift();
-                const enemy = new Enemy(next.type, next.hpMult, next.path);
+                // 傳遞 next 物件本身，因為它可能包含 spawnLoc
+                const enemy = new Enemy(next);
                 this.enemies.push(enemy);
                 this.scene.add(enemy.mesh);
+                
+                if (enemy.isStationary) {
+                    // 傳送特效
+                    AudioSys.teleport();
+                    this.particles.push(new EffectParticle(enemy.mesh.position.x, 2, enemy.mesh.position.z, 0x9c27b0, 'burst', 2));
+                }
             }
 
             update() {
-                // --- 暫停邏輯 ---
                 if (this.isPaused) {
-                    this.renderer.render(this.scene, this.camera); // 保持渲染，不更新邏輯
+                    this.renderer.render(this.scene, this.camera); 
                     return; 
                 }
 
@@ -652,7 +687,6 @@
 
                 this.animals.forEach(a => a.update());
 
-                // 植物生長邏輯
                 for (let i = this.plants.length - 1; i >= 0; i--) {
                     this.plants[i].update();
                 }
@@ -702,9 +736,8 @@
             }
 
             removeEnemy(e) {
-                // 如果死掉的是魔王，且還有魔王沒出來，排程下一隻
                 if (e.type === 'BOSS' && this.bossesRemainingInWave > 0) {
-                    this.spawnBossSequence(100); // 100幀 (約1.5秒) 後出現下一隻
+                    this.spawnBossSequence(100); 
                 }
 
                 this.scene.remove(e.mesh);
@@ -756,7 +789,6 @@
                 
                 this.closePanel();
                 
-                // 判斷是農作物還是防禦塔
                 const isFarm = FARM_DATA[type] !== undefined;
                 if (!isFarm) {
                     this.rangeCircle.visible = true;
@@ -789,7 +821,6 @@
                         this.ghostMesh.position.set(pos.worldX, 1, pos.worldZ);
                         this.ghostMesh.visible = true;
                         const cell = this.grid[pos.x][pos.z];
-                        // 檢查：空地、無塔、無植物、無裝飾
                         const canBuild = cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration;
                         this.ghostMesh.children[0].material.color.setHex(canBuild ? 0x76ff03 : 0xff1744);
                         
@@ -812,14 +843,12 @@
                 if (this.buildType) {
                     if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
                         if (FARM_DATA[this.buildType]) {
-                            // 種植
                             if (this.money >= FARM_DATA[this.buildType].cost) {
                                 this.buildPlant(pos.x, pos.z, this.buildType);
                             } else {
                                 AudioSys.error();
                             }
                         } else {
-                            // 蓋塔
                             if (this.money >= TOWER_DATA[this.buildType].cost) {
                                 this.buildTower(pos.x, pos.z, this.buildType);
                             } else {
@@ -828,7 +857,6 @@
                         }
                     }
                 } else {
-                    // 收成
                     if (cell.plant) {
                         cell.plant.tryHarvest();
                     } else if (cell.tower) {
@@ -857,8 +885,8 @@
                 this.scene.add(p.mesh);
                 this.plants.push(p);
                 this.grid[gx][gz].plant = p;
-                AudioSys.build(); // 挖土聲
-                this.particles.push(new EffectParticle(p.mesh.position.x, 1, p.mesh.position.z, 0x8d6e63, 'burst')); // 泥土特效
+                AudioSys.build(); 
+                this.particles.push(new EffectParticle(p.mesh.position.x, 1, p.mesh.position.z, 0x8d6e63, 'burst')); 
                 this.selectBuildType(null);
                 this.updateUI();
             }
@@ -954,40 +982,32 @@
             }
         }
 
-        // ==========================================
-        // 植物類別
-        // ==========================================
         class Plant {
             constructor(gx, gz, type) {
                 this.gx = gx; this.gz = gz; this.type = type;
                 this.data = FARM_DATA[type];
-                this.growth = 0; // 0 to 1
+                this.growth = 0; 
                 this.maxGrowth = this.data.growTime;
                 
                 this.mesh = new THREE.Group();
                 this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
 
-                // 幼苗 (通用)
                 const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 8), new THREE.MeshLambertMaterial({color: 0x8bc34a}));
                 sprout.position.y = 0.5;
                 this.mesh.add(sprout);
-                this.visual = sprout; // 引用當前視覺模型
+                this.visual = sprout; 
 
-                // 成熟模型 (隱藏)
                 if (type === 'FRUIT') {
-                    // 果樹
                     this.matureMesh = new THREE.Group();
                     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.5), new THREE.MeshLambertMaterial({color: 0x795548}));
                     trunk.position.y = 0.75;
                     const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5), new THREE.MeshLambertMaterial({color: 0x4caf50}));
                     leaves.position.y = 2.5;
-                    // 紅色果實
                     const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f1.position.set(0.8, 2.5, 0.5);
                     const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f2.position.set(-0.7, 3.0, -0.4);
                     const f3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f3.position.set(0.2, 2.2, -0.9);
                     this.matureMesh.add(trunk, leaves, f1, f2, f3);
                 } else {
-                    // 大南瓜
                     this.matureMesh = new THREE.Group();
                     const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 8), new THREE.MeshLambertMaterial({color: 0xff9800}));
                     pumpkin.scale.y = 0.7; pumpkin.position.y = 1;
@@ -1003,7 +1023,6 @@
             update() {
                 if (this.growth < this.maxGrowth) {
                     this.growth++;
-                    // 成長動畫：幼苗變大 -> 切換模型
                     const progress = this.growth / this.maxGrowth;
                     
                     if (progress < 0.5) {
@@ -1018,10 +1037,8 @@
                         this.matureMesh.scale.set(s, s, s);
                     }
                 } else {
-                    // 成熟動畫 (跳動)
                     const s = 1 + Math.sin(Date.now() * 0.005) * 0.1;
                     this.matureMesh.scale.set(s, s, s);
-                    // 發光提示
                     this.matureMesh.children.forEach(c => {
                         if(c.material.emissive) c.material.emissive.setHex(0x333333);
                     });
@@ -1030,15 +1047,12 @@
 
             tryHarvest() {
                 if (this.growth >= this.maxGrowth) {
-                    // 收成
                     game.money += this.data.sell;
                     AudioSys.harvest();
                     
-                    // 浮動文字
                     const text = document.createElement('div');
                     text.className = 'float-text';
                     text.innerText = `+$${this.data.sell}`;
-                    // 將 3D 座標轉為 2D 螢幕座標
                     const vec = this.mesh.position.clone();
                     vec.y += 3;
                     vec.project(game.camera);
@@ -1049,7 +1063,6 @@
                     document.body.appendChild(text);
                     setTimeout(() => text.remove(), 1000);
 
-                    // 移除植物
                     game.scene.remove(this.mesh);
                     game.grid[this.gx][this.gz].plant = null;
                     game.plants = game.plants.filter(p => p !== this);
@@ -1057,16 +1070,11 @@
                     
                     game.updateUI();
                 } else {
-                    // 未成熟提示音
                     AudioSys.error();
                 }
             }
         }
 
-        // ==========================================
-        // 其他實體類別 (動物、敵人、塔、子彈、特效)
-        // ==========================================
-        
         class Animal {
             constructor(gx, gz) {
                 this.hpMax = 200; this.hp = this.hpMax;
@@ -1095,25 +1103,51 @@
         }
 
         class Enemy {
-            constructor(type, hpMult, path) {
-                this.type = type; this.path = path; this.pathIdx = 0;
+            constructor(opts) {
+                // 解構參數
+                this.type = opts.type;
+                this.path = opts.path || []; // 突襲模式可能沒有 path
+                this.pathIdx = 0;
+                const hpMult = opts.hpMult || 1;
+                
+                // 屬性初始化
                 this.hpMax = 50 * hpMult; this.speed = 0.08; this.color = 0xffffff; this.reward = 15;
                 this.isSlowed = 0; this.flyHeight = 0; this.attackCooldown = 0; this.damage = 4; 
                 this.defense = Math.floor(game.wave * 0.8) + 1; this.attackRange = 3; 
+                
+                // 突襲模式屬性
+                this.isStationary = false;
+                if (opts.spawnLoc) {
+                    this.isStationary = true;
+                    // 傳入的 spawnLoc
+                    this.spawnPos = opts.spawnLoc;
+                }
+
                 let geo;
-                if (type === 'NORMAL') { geo = new THREE.DodecahedronGeometry(1.5); this.color = 0x5c6bc0; this.speed = 0.08; }
-                else if (type === 'FAST') { geo = new THREE.ConeGeometry(1, 2.5, 8); this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult; this.attackRange = 2; this.damage = 3; }
-                else if (type === 'TANK') { geo = new THREE.BoxGeometry(2.5, 2.5, 2.5); this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 10; this.defense += 3; this.attackRange = 5; }
-                else if (type === 'SHOOTER') { geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8); this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; this.damage = 8; this.attackRange = 18; }
-                else if (type === 'BOMBER') { geo = new THREE.IcosahedronGeometry(1.8, 1); this.color = 0x212121; this.speed = 0.05; this.hpMax = 80 * hpMult; this.attackRange = 6; this.defense += 5; this.reward = 50; }
-                else if (type === 'FLYING') { geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6); this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25; const startP = {x: 0, z: Math.random() * GRID_H}; this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE); const endP = {x: 18, z: 12}; this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE); }
-                else if (type === 'BOSS') { geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8); this.color = 0xffd700; this.speed = 0.03; this.hpMax = 50 * hpMult * 30; this.reward = 500; this.defense += 10; this.damage = 50; this.attackRange = 4; }
+                if (this.type === 'NORMAL') { geo = new THREE.DodecahedronGeometry(1.5); this.color = 0x5c6bc0; this.speed = 0.08; }
+                else if (this.type === 'FAST') { geo = new THREE.ConeGeometry(1, 2.5, 8); this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult; this.attackRange = 2; this.damage = 3; }
+                else if (this.type === 'TANK') { geo = new THREE.BoxGeometry(2.5, 2.5, 2.5); this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 10; this.defense += 3; this.attackRange = 5; }
+                else if (this.type === 'SHOOTER') { geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8); this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; this.damage = 8; this.attackRange = 18; }
+                else if (this.type === 'BOMBER') { geo = new THREE.IcosahedronGeometry(1.8, 1); this.color = 0x212121; this.speed = 0.05; this.hpMax = 80 * hpMult; this.attackRange = 6; this.defense += 5; this.reward = 50; }
+                else if (this.type === 'FLYING') { geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6); this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25; const startP = {x: 0, z: Math.random() * GRID_H}; this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE); const endP = {x: 18, z: 12}; this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE); }
+                else if (this.type === 'BOSS') { geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8); this.color = 0xffd700; this.speed = 0.03; this.hpMax = 50 * hpMult * 30; this.reward = 500; this.defense += 10; this.damage = 50; this.attackRange = 4; }
+                
                 this.hp = this.hpMax;
                 this.mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: this.color })); this.mesh.castShadow = true;
-                if (type === 'FLYING') { this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); }
-                else { const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); }
-                if (type === 'BOSS') { this.mesh.scale.set(1.5, 1.5, 1.5); this.mesh.position.y = 3; }
-                const barContainer = new THREE.Group(); const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000})); const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x76ff03})); fg.position.z = 0.01; barContainer.add(bg, fg); barContainer.position.y = type === 'BOSS' ? 5 : 3; this.hpBar = fg; this.mesh.add(barContainer);
+                
+                // 位置初始化
+                if (this.isStationary) {
+                    // 突襲模式：直接生在空地
+                    this.mesh.position.set(this.spawnPos.x + TILE_SIZE/2, 1.5, this.spawnPos.z + TILE_SIZE/2);
+                } else if (this.type === 'FLYING') { 
+                    this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); 
+                } else { 
+                    // 正常走路模式
+                    const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); 
+                }
+                
+                if (this.type === 'BOSS') { this.mesh.scale.set(1.5, 1.5, 1.5); this.mesh.position.y = 3; }
+                const barContainer = new THREE.Group(); const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000})); const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x76ff03})); fg.position.z = 0.01; barContainer.add(bg, fg); barContainer.position.y = this.type === 'BOSS' ? 5 : 3; this.hpBar = fg; this.mesh.add(barContainer);
                 this.onBeforeRender = () => { barContainer.lookAt(game.camera.position); };
             }
             update(animals, towers) {
@@ -1143,6 +1177,13 @@
                         }
                     }
                 }
+                
+                // 如果是定點突襲單位，就不移動，只負責攻擊
+                if (this.isStationary) {
+                    this.mesh.children[0].lookAt(game.camera.position); 
+                    return 'STATIONARY';
+                }
+
                 if (this.type === 'FLYING') {
                     const dir = new THREE.Vector3().subVectors(this.customTarget, this.mesh.position).normalize(); this.mesh.position.add(dir.multiplyScalar(currentSpeed * TILE_SIZE));
                     if (this.mesh.position.distanceTo(this.customTarget) < 1) return 'REACHED';
