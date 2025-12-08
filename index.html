@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 魔王降臨</title>
+    <title>3D 極限塔防 - 魔王降臨 (強化版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
             --accent: #ff6d00; /* 活潑橘 */
-            --bg-ui: rgba(255, 255, 255, 0.9); /* 亮白 UI */
+            --bg-ui: rgba(255, 255, 255, 0.95); /* 亮白 UI */
             --text-color: #333;
         }
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #4fc3f7; color: var(--text-color); }
@@ -25,11 +25,24 @@
             align-self: center; font-weight: bold; font-size: 1.3em;
             box-shadow: 0 5px 20px rgba(0,0,0,0.15); color: #444;
             position: relative;
+            align-items: center;
         }
         .stat { display: flex; align-items: center; gap: 8px; }
         .stat span { color: #d32f2f; }
         .stat.money span { color: #f57f17; }
         .stat.animals span { color: #0277bd; }
+
+        /* 治療按鈕 */
+        .heal-btn {
+            background: #00e676; color: white; border: none; border-radius: 50%; 
+            width: 30px; height: 30px; cursor: pointer; font-weight: bold; font-size: 1.2em;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: transform 0.1s;
+            margin-left: 5px;
+        }
+        .heal-btn:active { transform: scale(0.9); }
+        .heal-btn:hover { background: #00c853; }
+        .heal-cost { font-size: 0.6em; color: #666; margin-left: 5px; }
 
         #bgm-toggle {
             background: #eee; border: none; border-radius: 50%; width: 40px; height: 40px;
@@ -105,26 +118,43 @@
             color: red; font-weight: bold; font-size: 2em; text-shadow: 0 0 10px white;
             opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 900;
         }
+        
+        .hp-bar-bg { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+        .hp-bar-fill { height: 100%; background: #00e676; width: 100%; transition: width 0.2s; }
     </style>
 </head>
 <body>
 
-    <div class="diff-tag">BOSS降臨: 30倍血量 | 護衛隊 | 四路進攻</div>
+    <div class="diff-tag">BOSS戰: 升級塔防禦 | 治療小動物</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
     <div id="ui-layer">
         <div id="top-bar">
             <div class="stat">❤️ <span id="lives-txt">20</span></div>
-            <div class="stat money">💰 <span id="money-txt">300</span></div>
-            <div class="stat animals">🐰 倖存: <span id="animals-txt">3</span></div>
-            <div class="stat">🌊 波次: <span id="wave-txt">1</span></div>
+            <div class="stat money">💰 <span id="money-txt">900</span></div>
+            <div class="stat animals" style="margin-right:0;">
+                🐰 倖存: <span id="animals-txt">3</span>
+            </div>
+            <div style="display:flex; align-items:center;">
+                <button class="heal-btn" onclick="game.healAnimals()" title="花費 $500 治療所有小動物">✚</button>
+                <span class="heal-cost">($500)</span>
+            </div>
+            
+            <div class="stat" style="margin-left: 20px;">🌊 波次: <span id="wave-txt">1</span></div>
             <div class="stat">👾 敵人: <span id="enemies-txt">0</span></div>
             <button id="bgm-toggle" onclick="AudioSys.toggleBGM()">🎵</button>
         </div>
 
         <!-- 升級面板 -->
         <div id="upgrade-panel">
-            <h2 style="margin:0 0 15px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
+            <h2 style="margin:0 0 5px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
+            
+            <!-- 新增血條顯示 -->
+            <div style="font-size:0.8em; color:#666; margin-bottom:10px;">
+                耐久度: <span id="up-hp">500</span> / <span id="up-max-hp">500</span>
+                <div class="hp-bar-bg"><div class="hp-bar-fill" id="up-hp-bar"></div></div>
+            </div>
+
             <div class="up-info">
                 等級: <span id="up-level" class="up-val">1</span><br>
                 傷害: <span id="up-dmg" class="up-val">10</span><br>
@@ -200,6 +230,7 @@
             animalDie() { this.play('sawtooth', 50, 0.8, 0.2); },
             enemyShoot() { this.play('square', 400, 0.1, 0.05); }, 
             towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); }, 
+            heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -259,7 +290,7 @@
         class Game3D {
             constructor() {
                 this.lives = 20;
-                this.money = 300; 
+                this.money = 900; // 調整為 3 倍初始金錢 (原 300)
                 this.wave = 1;
                 this.enemies = [];
                 this.towers = [];
@@ -432,6 +463,34 @@
                 document.getElementById('animals-txt').innerText = this.animals.length;
             }
 
+            // 新增功能：治療小動物
+            healAnimals() {
+                const cost = 500;
+                if (this.money >= cost && this.animals.length > 0) {
+                    let healed = false;
+                    this.animals.forEach(a => {
+                        if (a.hp < a.hpMax) {
+                            a.hp = Math.min(a.hpMax, a.hp + (a.hpMax * 0.5)); // 補 50%
+                            a.updateBar();
+                            // 特效
+                            this.particles.push(new EffectParticle(a.mesh.position.x, 3, a.mesh.position.z, 0x00e676, 'burst'));
+                            healed = true;
+                        }
+                    });
+
+                    if (healed) {
+                        this.money -= cost;
+                        AudioSys.heal();
+                        this.updateUI();
+                    } else {
+                        // 都滿血，不扣錢
+                        AudioSys.error();
+                    }
+                } else {
+                    AudioSys.error();
+                }
+            }
+
             isPointOnPath(x, z, path) {
                 for(let i=0; i<path.length-1; i++) {
                     let p1 = path[i];
@@ -600,6 +659,9 @@
                 const msg = document.getElementById('tower-destroyed-msg');
                 msg.style.opacity = 1;
                 setTimeout(() => msg.style.opacity = 0, 1500);
+                
+                // 如果正在查看這個塔，關閉面板
+                if(this.selectedTower === t) this.closePanel();
             }
 
             selectBuildType(type) {
@@ -650,6 +712,9 @@
             }
 
             onClick(e) {
+                // 如果點擊的是按鈕，不觸發地圖點擊
+                if (e.target.closest('button') || e.target.closest('.tower-card')) return;
+
                 const pos = this.getGridPos(e);
                 if (!pos || pos.x < 0 || pos.x >= GRID_W || pos.z < 0 || pos.z >= GRID_H) return;
                 const cell = this.grid[pos.x][pos.z];
@@ -703,6 +768,11 @@
                 document.getElementById('up-range').innerText = t.getRange();
                 document.getElementById('btn-upgrade').innerText = `升級 ($${cost})`;
                 document.getElementById('btn-upgrade').disabled = this.money < cost;
+                
+                // 更新血量 UI
+                document.getElementById('up-hp').innerText = Math.floor(t.hp);
+                document.getElementById('up-max-hp').innerText = t.maxHp;
+                document.getElementById('up-hp-bar').style.width = (t.hp / t.maxHp * 100) + '%';
             }
 
             upgradeTower() {
@@ -805,10 +875,14 @@
                 this.mesh.children[0].rotation.y = Math.sin(time * 0.5) * 0.1;
             }
 
-            takeDamage(amt) {
-                this.hp -= amt;
+            updateBar() {
                 const pct = Math.max(0, this.hp / this.hpMax);
                 this.hpBar.scale.x = pct;
+            }
+
+            takeDamage(amt) {
+                this.hp -= amt;
+                this.updateBar();
                 if (this.hp <= 0) {
                     game.removeAnimal(this);
                 }
@@ -867,14 +941,13 @@
                     const endP = {x: 18, z: 12}; 
                     this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE);
                 } else if (type === 'BOSS') {
-                    // 魔王設定
                     geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8);
-                    this.color = 0xffd700; // 金色
-                    this.speed = 0.03; // 很慢
-                    this.hpMax = 50 * hpMult * 30; // 30倍血量
+                    this.color = 0xffd700; 
+                    this.speed = 0.03; 
+                    this.hpMax = 50 * hpMult * 30; 
                     this.reward = 500;
-                    this.defense += 10; // 超高防禦
-                    this.damage = 50; // 秒殺級攻擊
+                    this.defense += 10; 
+                    this.damage = 50; 
                     this.attackRange = 4;
                 }
 
@@ -890,7 +963,6 @@
                     this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE);
                 }
                 
-                // BOSS體型變大
                 if (type === 'BOSS') {
                     this.mesh.scale.set(1.5, 1.5, 1.5);
                     this.mesh.position.y = 3;
@@ -917,7 +989,6 @@
                     this.mesh.material.emissive.setHex(0x000000);
                 }
 
-                // 炸彈客/魔王 優先攻擊塔
                 if ((this.type === 'BOMBER' || this.type === 'BOSS') && towers.length > 0) {
                     for(let tower of towers) {
                         const dist = this.mesh.position.distanceTo(tower.mesh.position);
@@ -1042,7 +1113,8 @@
         class Tower {
             constructor(gx, gz, type) {
                 this.gx = gx; this.gz = gz; this.type = type; this.level = 1; this.cooldown = 0;
-                this.hp = 100; // 塔也有血量了
+                this.maxHp = 500; // 基礎血量提升
+                this.hp = this.maxHp; 
                 const data = TOWER_DATA[type];
                 this.mesh = new THREE.Group();
                 this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
@@ -1087,6 +1159,7 @@
 
             takeDamage(amount) {
                 this.hp -= amount;
+                if(game.selectedTower === this) game.updatePanelInfo(); // 更新 UI
                 if (this.hp <= 0) {
                     game.removeTower(this);
                 }
@@ -1156,6 +1229,9 @@
                 this.level++;
                 const s = 1 + (this.level * 0.1);
                 this.mesh.scale.set(s, s, s);
+                // 升級增加血量上限並回滿血
+                this.maxHp += 500;
+                this.hp = this.maxHp;
             }
         }
 
