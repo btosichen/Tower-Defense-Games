@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 農場保衛戰 (活潑動物版)</title>
+    <title>3D 極限塔防 - 帝國擴張版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
@@ -47,8 +47,6 @@
         #pause-btn { background: #ffeb3b; color: #f57f17; }
         #pause-btn:hover { background: #fdd835; }
         #pause-btn.paused { background: #ff9800; color: white; animation: pulse 1s infinite; }
-
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
         .heal-cost { font-size: 0.6em; color: #666; margin-left: 2px; margin-right: 10px; }
 
@@ -154,7 +152,7 @@
 </head>
 <body>
 
-    <div class="diff-tag">任務: 保護活潑的小動物 | 抓菜蟲 | 伐木</div>
+    <div class="diff-tag">任務: 守護木材(有小偷!) | 地圖擴張 | 抓菜蟲</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
     <div id="pause-overlay">已暫停</div>
     
@@ -175,7 +173,7 @@
                 <span class="heal-cost">($500)</span>
             </div>
             
-            <div class="stat" style="margin-left: 10px;">🌊 <span id="wave-txt">1</span></div>
+            <div class="stat" style="margin-left: 10px;">🌊 <span id="wave-txt">1</span> / 2</div>
             <div class="stat">👾 <span id="enemies-txt">0</span></div>
             <div style="flex:1;"></div>
             <button id="pause-btn" class="icon-btn" onclick="game.togglePause()" title="暫停遊戲">⏸️</button>
@@ -286,6 +284,7 @@
             teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); }, 
             squish() { this.play('square', 200, 0.1, 0.1, 'slide'); }, 
             chop() { this.play('sawtooth', 100, 0.05, 0.1); }, 
+            steal() { this.play('triangle', 600, 0.1, 0.1, 'slide'); }, // 小偷音效
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -352,7 +351,9 @@
 
                 this.enemies = [];
                 this.worms = []; 
-                this.loggers = []; 
+                this.loggers = [];
+                this.woodPiles = []; // 木材堆
+                this.thieves = []; // 小偷
                 this.towers = [];
                 this.plants = []; 
                 this.projectiles = [];
@@ -642,7 +643,6 @@
                 return { x: Math.random() * this.gridW * TILE_SIZE, z: Math.random() * this.gridH * TILE_SIZE };
             }
 
-            // --- 菜蟲生成 ---
             spawnWorm() {
                 const startPos = this.getRandomFreeTile();
                 const worm = new Worm(startPos.x, startPos.z);
@@ -675,7 +675,6 @@
                 setTimeout(() => text.remove(), 1000);
             }
 
-            // --- 伐木工生成 ---
             spawnLogger() {
                 const startPos = this.getRandomFreeTile();
                 const logger = new Lumberjack(startPos.x, startPos.z);
@@ -683,25 +682,79 @@
                 this.scene.add(logger.mesh);
             }
 
-            // 關卡切換邏輯
+            // 新增：生成木材堆 (Lumberjack 完成時呼叫)
+            spawnWoodPile(x, z) {
+                const pile = new WoodPile(x, z);
+                this.woodPiles.push(pile);
+                this.scene.add(pile.mesh);
+                
+                // 生成小偷
+                this.spawnThief(pile);
+            }
+
+            // 新增：生成小偷
+            spawnThief(targetPile) {
+                // 從隨機邊緣生成
+                const startX = Math.random() > 0.5 ? 0 : (this.gridW-1)*TILE_SIZE;
+                const startZ = Math.random() * (this.gridH-1)*TILE_SIZE;
+                
+                const thief = new Thief(startX, startZ, targetPile);
+                this.thieves.push(thief);
+                this.scene.add(thief.mesh);
+            }
+
+            // 新增：回收木材
+            collectWood(pile) {
+                this.scene.remove(pile.mesh);
+                this.woodPiles = this.woodPiles.filter(p => p !== pile);
+                
+                game.money += 800;
+                game.updateUI();
+                AudioSys.harvest();
+                
+                const text = document.createElement('div');
+                text.className = 'float-text wood';
+                text.innerText = `+$800 (木材)`;
+                const vec = pile.mesh.position.clone();
+                vec.y += 2;
+                vec.project(this.camera);
+                const x = (vec.x * .5 + .5) * window.innerWidth;
+                const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                text.style.left = `${x}px`;
+                text.style.top = `${y}px`;
+                document.body.appendChild(text);
+                setTimeout(() => text.remove(), 1000);
+                
+                // 小偷如果目標是這個，就失敗逃跑
+                this.thieves.forEach(t => {
+                    if (t.target === pile) {
+                        t.state = 'ESCAPED';
+                        t.target = null;
+                    }
+                });
+            }
+
             startNextLevel() {
                 document.getElementById('level-up-overlay').style.display = 'none';
                 
-                // 擴張地圖 1/3
+                // 地圖擴張 33%
                 this.gridW = Math.floor(this.gridW * 1.33);
                 this.gridH = Math.floor(this.gridH * 1.33);
                 this.level++;
                 this.wave = 1;
                 
-                // 重置場景但保留金錢
-                this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
-                this.towers.forEach(t => this.scene.remove(t.mesh)); this.towers = [];
-                this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
-                this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
-                this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
-                this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
+                // 清理所有動態物件
+                const removeAll = (arr) => { arr.forEach(o => this.scene.remove(o.mesh)); return []; };
+                this.enemies = removeAll(this.enemies);
+                this.towers = removeAll(this.towers);
+                this.plants = removeAll(this.plants);
+                this.worms = removeAll(this.worms);
+                this.loggers = removeAll(this.loggers);
+                this.projectiles = removeAll(this.projectiles);
+                this.particles = removeAll(this.particles);
+                this.woodPiles = removeAll(this.woodPiles);
+                this.thieves = removeAll(this.thieves);
                 
-                // 重建
                 this.createMap();
                 this.createDecorations();
                 this.initAnimals();
@@ -718,7 +771,7 @@
 
                 const activePaths = this.getPaths();
                 const groups = 8 + Math.floor(this.wave * 2); 
-                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1); // 難度隨Level和Wave增加
+                const hpMult = Math.pow(1.5, (this.level-1)*2 + this.wave - 1); 
                 let spawnDelayBase = Math.max(10, 35 - (this.wave * 2));
 
                 for(let i=0; i<groups; i++) {
@@ -727,23 +780,27 @@
                         let type = 'NORMAL';
                         const rand = Math.random();
                         if (this.wave >= 1 && rand > 0.5) type = 'FAST';
-                        if (this.wave >= 2 && rand > 0.7) type = 'SHOOTER'; 
-                        if (this.wave >= 3 && rand > 0.8) type = 'TANK';
-                        if (this.wave >= 4 && Math.random() > 0.85) type = 'FLYING';
+                        if (this.wave >= 1 && rand > 0.7) type = 'SHOOTER'; 
+                        if (this.wave >= 2 && rand > 0.8) type = 'TANK';
+                        if (this.wave >= 2 && Math.random() > 0.85) type = 'FLYING';
 
                         let path = activePaths[j % 4]; 
                         if (type === 'FLYING') path = activePaths[Math.floor(Math.random() * 4)];
                         this.spawnQueue.push({ type, hpMult, path, delay: baseDelay + (j * 3) });
                     }
-                    if (this.wave >= 2 && Math.random() > 0.85) {
+                    if (this.wave >= 1 && Math.random() > 0.85) {
                         for(let b=0; b<4; b++) {
                              this.spawnQueue.push({ type: 'BOMBER', hpMult, path: activePaths[b % 4], delay: baseDelay + 15 + (b * 2) });
                         }
                     }
                 }
 
-                this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4); 
-                this.spawnBossSequence(groups * spawnDelayBase); 
+                if (this.wave === 2) {
+                    this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4); 
+                    this.spawnBossSequence(groups * spawnDelayBase); 
+                } else {
+                    this.bossesRemainingInWave = 0;
+                }
             }
 
             spawnBossSequence(baseDelay = 0) {
@@ -753,7 +810,7 @@
                 
                 const activePaths = this.getPaths();
                 const bossPath = activePaths[Math.floor(Math.random() * 4)]; 
-                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
+                const hpMult = Math.pow(1.5, (this.level-1)*2 + this.wave - 1);
 
                 this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
                 
@@ -798,13 +855,10 @@
 
                 if (this.waveActive) {
                     this.spawnEnemy();
-                    // 檢查波次結束
                     if (this.spawnQueue.length === 0 && this.enemies.length === 0 && this.bossesRemainingInWave === 0) {
-                        // 如果這波有 Boss 且全部打完，觸發關卡結束
-                        // 這裡簡化為：每打完 5 波 升一關
-                        if (this.wave % 5 === 0) {
+                        if (this.wave === 2) {
                             document.getElementById('level-up-overlay').style.display = 'flex';
-                            this.waveActive = false; // 暫停等玩家點擊
+                            this.waveActive = false; 
                         } else {
                             this.endWave();
                         }
@@ -815,7 +869,6 @@
                     if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
                 }
                 
-                // 隨機生成伐木工 (機率低)
                 if (Math.random() < 0.003 && this.loggers.length < 3) {
                     this.spawnLogger();
                 }
@@ -824,6 +877,7 @@
                 for (let i = this.worms.length - 1; i >= 0; i--) this.worms[i].update(this.plants);
                 for (let i = this.loggers.length - 1; i >= 0; i--) this.loggers[i].update(this.decorations);
                 for (let i = this.plants.length - 1; i >= 0; i--) this.plants[i].update();
+                for (let i = this.thieves.length - 1; i >= 0; i--) this.thieves[i].update();
 
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     const e = this.enemies[i];
@@ -956,14 +1010,25 @@
 
             onClick(e) {
                 if (e.target.closest('button') || e.target.closest('.tower-card')) return;
+                
                 this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
                 this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
                 this.raycaster.setFromCamera(this.mouse, this.camera);
+
+                // 優先檢測菜蟲
                 const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
                 if (wormIntersects.length > 0) {
                     const clickedMesh = wormIntersects[0].object.parent; 
                     const worm = this.worms.find(w => w.mesh === clickedMesh || w.mesh.children.includes(clickedMesh));
                     if (worm) { this.catchWorm(worm); return; }
+                }
+                
+                // 檢測木材堆
+                const pileIntersects = this.raycaster.intersectObjects(this.woodPiles.map(p => p.mesh), true);
+                if (pileIntersects.length > 0) {
+                     const clickedMesh = pileIntersects[0].object.parent;
+                     const pile = this.woodPiles.find(p => p.mesh === clickedMesh || p.mesh.children.includes(clickedMesh));
+                     if (pile) { this.collectWood(pile); return; }
                 }
 
                 const pos = this.getGridPos(e);
@@ -1071,6 +1136,7 @@
             }
 
             updateUI() {
+                document.getElementById('level-txt').innerText = this.level;
                 document.getElementById('lives-txt').innerText = this.lives;
                 document.getElementById('money-txt').innerText = this.money;
                 document.getElementById('wave-txt').innerText = this.wave;
@@ -1102,130 +1168,69 @@
         }
 
         // ==========================================
-        // 伐木工 (New)
+        // 伐木工
         // ==========================================
         class Lumberjack {
             constructor(x, z) {
                 this.mesh = new THREE.Group();
-                // 身體
-                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5), new THREE.MeshLambertMaterial({color: 0xd32f2f})); // 紅格子
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5), new THREE.MeshLambertMaterial({color: 0xd32f2f})); 
                 body.position.y = 0.75;
                 const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshLambertMaterial({color: 0xffccbc}));
                 head.position.y = 1.8;
                 const hat = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.8), new THREE.MeshLambertMaterial({color: 0x5d4037}));
                 hat.position.y = 2.4;
-                // 斧頭
                 const axeHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshLambertMaterial({color: 0x8d6e63}));
                 axeHandle.rotation.x = Math.PI/2; axeHandle.position.set(0.5, 1, 0.5);
                 const axeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.4), new THREE.MeshLambertMaterial({color: 0x90a4ae}));
                 axeBlade.position.set(0.5, 1, 1);
-                
                 this.mesh.add(body, head, hat, axeHandle, axeBlade);
                 this.mesh.position.set(x, 0, z);
                 this.mesh.castShadow = true;
-                this.axe = axeHandle; // 用於動畫
-
-                this.targetTree = null;
-                this.state = 'MOVING'; // MOVING, CHOPPING
-                this.timer = 0;
-                // 隨機 60~90 秒 (60fps * sec)
-                this.chopDuration = (60 + Math.random() * 30) * 60;
+                this.axe = axeHandle; 
+                this.targetTree = null; this.state = 'MOVING'; this.timer = 0;
+                this.chopDuration = (60 + Math.random() * 30) * 60; // 60-90s
                 this.speed = 0.05;
-                
-                // 進度條
                 const barGroup = new THREE.Group();
                 const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.3), new THREE.MeshBasicMaterial({color: 0x333333}));
                 const fg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.2), new THREE.MeshBasicMaterial({color: 0xffab00}));
-                fg.position.z = 0.01;
-                barGroup.add(bg, fg);
-                barGroup.position.y = 3.5;
-                barGroup.visible = false;
-                this.progressBar = fg;
-                this.barGroup = barGroup;
-                this.mesh.add(barGroup);
+                fg.position.z = 0.01; barGroup.add(bg, fg); barGroup.position.y = 3.5; barGroup.visible = false;
+                this.progressBar = fg; this.barGroup = barGroup; this.mesh.add(barGroup);
             }
-
             update(decorations) {
-                // 讓進度條朝向相機
                 this.barGroup.lookAt(game.camera.position);
-
                 if (!this.targetTree) {
-                    // 尋找最近的樹
-                    let minDist = Infinity;
-                    let nearest = null;
+                    let minDist = Infinity; let nearest = null;
                     for (let d of decorations) {
                         if (d.type === 'tree') {
                             const dist = this.mesh.position.distanceTo(d.mesh.position);
-                            if (dist < minDist) {
-                                minDist = dist;
-                                nearest = d;
-                            }
+                            if (dist < minDist) { minDist = dist; nearest = d; }
                         }
                     }
                     this.targetTree = nearest;
-                    if(!nearest) {
-                        // 沒樹了，消失
-                        game.scene.remove(this.mesh);
-                        game.loggers = game.loggers.filter(l => l !== this);
-                        return;
-                    }
+                    if(!nearest) { game.scene.remove(this.mesh); game.loggers = game.loggers.filter(l => l !== this); return; }
                 }
-
                 if (this.state === 'MOVING') {
                     const targetPos = this.targetTree.mesh.position;
                     const dist = this.mesh.position.distanceTo(targetPos);
-                    if (dist > 1.5) {
-                        this.mesh.lookAt(targetPos);
-                        this.mesh.translateZ(this.speed);
-                        // 走路動畫
-                        this.mesh.position.y = Math.sin(Date.now() * 0.01) * 0.1;
-                    } else {
-                        this.state = 'CHOPPING';
-                        this.barGroup.visible = true;
-                    }
+                    if (dist > 1.5) { this.mesh.lookAt(targetPos); this.mesh.translateZ(this.speed); this.mesh.position.y = Math.sin(Date.now() * 0.01) * 0.1; }
+                    else { this.state = 'CHOPPING'; this.barGroup.visible = true; }
                 } else if (this.state === 'CHOPPING') {
                     this.timer++;
-                    
-                    // 砍樹動畫
                     this.axe.rotation.x = Math.PI/2 + Math.sin(Date.now() * 0.01) * 0.5;
-                    
-                    // 更新進度條
                     const progress = this.timer / this.chopDuration;
                     this.progressBar.scale.x = progress;
-                    
-                    if (this.timer >= this.chopDuration) {
-                        this.finishJob();
-                    }
+                    if (this.timer >= this.chopDuration) this.finishJob();
                 }
             }
-
             finishJob() {
-                // 移除樹木
                 game.scene.remove(this.targetTree.mesh);
-                game.grid[this.targetTree.x][this.targetTree.z].hasDecoration = false; // 解鎖該格
+                game.grid[this.targetTree.x][this.targetTree.z].hasDecoration = false; 
                 game.decorations = game.decorations.filter(d => d !== this.targetTree);
                 
-                // 給錢
-                game.money += 800;
-                game.updateUI();
-                AudioSys.harvest();
+                // Spawn Wood Pile instead of direct money
+                game.spawnWoodPile(this.mesh.position.x, this.mesh.position.z);
+                
                 AudioSys.chop();
-
-                // 浮動文字
-                const text = document.createElement('div');
-                text.className = 'float-text wood';
-                text.innerText = `+$800 (木材)`;
-                const vec = this.mesh.position.clone();
-                vec.y += 3;
-                vec.project(game.camera);
-                const x = (vec.x * .5 + .5) * window.innerWidth;
-                const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                text.style.left = `${x}px`;
-                text.style.top = `${y}px`;
-                document.body.appendChild(text);
-                setTimeout(() => text.remove(), 1000);
-
-                // 伐木工離開
                 game.scene.remove(this.mesh);
                 game.loggers = game.loggers.filter(l => l !== this);
                 game.particles.push(new EffectParticle(this.mesh.position.x, 1, this.mesh.position.z, 0x795548, 'burst', 2));
@@ -1233,8 +1238,98 @@
         }
 
         // ==========================================
-        // 其他既有類別 (菜蟲、植物、動物等)
+        // Wood Pile (New)
         // ==========================================
+        class WoodPile {
+            constructor(x, z) {
+                this.mesh = new THREE.Group();
+                const log1 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+                log1.rotation.z = Math.PI/2; log1.position.y = 0.3;
+                const log2 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+                log2.rotation.z = Math.PI/2; log2.position.set(0, 0.3, 0.5);
+                const log3 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+                log3.rotation.z = Math.PI/2; log3.position.set(0, 0.8, 0.25);
+                this.mesh.add(log1, log2, log3);
+                this.mesh.position.set(x, 0, z);
+            }
+        }
+
+        // ==========================================
+        // Thief (New)
+        // ==========================================
+        class Thief {
+            constructor(x, z, target) {
+                this.target = target;
+                this.mesh = new THREE.Group();
+                // Ninja-like appearance
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.5), new THREE.MeshLambertMaterial({color: 0x212121}));
+                body.position.y = 0.75;
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshLambertMaterial({color: 0x212121}));
+                head.position.y = 1.6;
+                const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.2), new THREE.MeshBasicMaterial({color: 0xffffff}));
+                eyes.position.set(0, 1.6, 0.4);
+                this.mesh.add(body, head, eyes);
+                this.mesh.position.set(x, 0, z);
+                
+                this.speed = 0.15; // fast
+                this.state = 'RUNNING';
+                this.timer = 0;
+            }
+            update() {
+                if (this.state === 'ESCAPED') {
+                    this.mesh.translateZ(this.speed);
+                    if (this.mesh.position.length() > 200) { // far away
+                        game.scene.remove(this.mesh);
+                        game.thieves = game.thieves.filter(t => t !== this);
+                    }
+                    return;
+                }
+                
+                if (!this.target || !game.woodPiles.includes(this.target)) {
+                    // Target gone, escape
+                    this.state = 'ESCAPED';
+                    return;
+                }
+                
+                const dist = this.mesh.position.distanceTo(this.target.mesh.position);
+                if (this.state === 'RUNNING') {
+                    if (dist > 1.5) {
+                        this.mesh.lookAt(this.target.mesh.position);
+                        this.mesh.translateZ(this.speed);
+                    } else {
+                        this.state = 'STEALING';
+                        // Alert icon
+                        const alert = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color: 0xff0000}));
+                        alert.position.y = 2.5;
+                        this.mesh.add(alert);
+                    }
+                } else if (this.state === 'STEALING') {
+                    this.timer++;
+                    if (this.timer > 120) { // 2 seconds (60fps)
+                        // Steal!
+                        game.scene.remove(this.target.mesh);
+                        game.woodPiles = game.woodPiles.filter(p => p !== this.target);
+                        AudioSys.steal();
+                        
+                        const text = document.createElement('div');
+                        text.className = 'float-text bad';
+                        text.innerText = `被偷了!`;
+                        const vec = this.mesh.position.clone();
+                        vec.y += 3;
+                        vec.project(game.camera);
+                        const x = (vec.x * .5 + .5) * window.innerWidth;
+                        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                        text.style.left = `${x}px`;
+                        text.style.top = `${y}px`;
+                        document.body.appendChild(text);
+                        setTimeout(() => text.remove(), 1000);
+                        
+                        this.state = 'ESCAPED';
+                    }
+                }
+            }
+        }
+
         class Worm {
             constructor(x, z) {
                 this.mesh = new THREE.Group();
