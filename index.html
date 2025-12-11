@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 農場保衛戰</title>
+    <title>3D 極限塔防 - 伐木大亨版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
@@ -24,7 +24,7 @@
             border-radius: 50px; pointer-events: auto; border-bottom: 4px solid var(--accent);
             align-self: center; font-weight: bold; font-size: 1.2em;
             box-shadow: 0 5px 20px rgba(0,0,0,0.15); color: #444;
-            align-items: center;
+            align-items: center; flex-wrap: wrap;
         }
         .stat { display: flex; align-items: center; gap: 5px; }
         .stat span { color: #d32f2f; font-family: monospace; font-size: 1.2em; }
@@ -134,6 +134,7 @@
             text-shadow: 0 0 5px black; pointer-events: none; animation: floatUp 1s forwards;
         }
         .float-text.bad { color: #ff1744; font-size: 1.8em; }
+        .float-text.wood { color: #795548; font-size: 1.8em; }
         @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
         
         /* 暫停遮罩 */
@@ -143,16 +144,29 @@
             justify-content: center; align-items: center; color: white; font-size: 3em; font-weight: bold;
             text-shadow: 0 0 20px black; z-index: 800;
         }
+        
+        #level-up-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: none; z-index: 950;
+            justify-content: center; align-items: center; flex-direction: column; color: white;
+        }
     </style>
 </head>
 <body>
 
-    <div class="diff-tag">任務: 抓菜蟲! | 1秒內不採收就被吃 | 魔王單挑</div>
+    <div class="diff-tag">伐木賺錢(慢) | 地圖隨關卡變大 | 魔王接力</div>
     <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
     <div id="pause-overlay">已暫停</div>
+    
+    <div id="level-up-overlay">
+        <h1 style="color:#76ff03">關卡完成!</h1>
+        <p style="font-size:1.5em">地圖擴張 +33%</p>
+        <button class="action-btn" onclick="game.startNextLevel()">進入下一關</button>
+    </div>
 
     <div id="ui-layer">
         <div id="top-bar">
+            <div class="stat">關卡: <span id="level-txt">1</span></div>
             <div class="stat">❤️ <span id="lives-txt">20</span></div>
             <div class="stat money">💰 <span id="money-txt">900</span></div>
             <div class="stat animals" style="margin-right:0;">🐰 <span id="animals-txt">3</span></div>
@@ -270,7 +284,8 @@
             heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
             harvest() { this.play('sine', 1000, 0.1, 0.1); setTimeout(()=>this.play('sine', 1500, 0.2, 0.1), 100); }, 
             teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); }, 
-            squish() { this.play('square', 200, 0.1, 0.1, 'slide'); }, // 抓蟲音效
+            squish() { this.play('square', 200, 0.1, 0.1, 'slide'); }, 
+            chop() { this.play('sawtooth', 100, 0.05, 0.1); }, // 砍樹聲
 
             toggleBGM() {
                 this.isBgmMuted = !this.isBgmMuted;
@@ -312,14 +327,7 @@
         };
 
         const TILE_SIZE = 5; 
-        const GRID_W = 20;
-        const GRID_H = 15;
         
-        const PATH_WEST = [{x:0, z:2}, {x:5, z:2}, {x:5, z:10}, {x:12, z:10}, {x:12, z:12}, {x:18, z:12}];
-        const PATH_NORTH = [{x:8, z:0}, {x:8, z:5}, {x:14, z:5}, {x:14, z:12}, {x:18, z:12}];
-        const PATH_SOUTH = [{x:10, z:14}, {x:10, z:8}, {x:16, z:8}, {x:16, z:12}, {x:18, z:12}];
-        const PATH_EAST = [{x:19, z:4}, {x:16, z:4}, {x:16, z:8}, {x:18, z:8}, {x:18, z:12}];
-
         const TOWER_DATA = {
             ARCHER: { cost: 40, range: 3.5, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' },
             ICE:    { cost: 70, range: 3, damage: 4,  rate: 45, color: 0x4fc3f7, name: "冰塔", type:'proj' },
@@ -336,15 +344,22 @@
             constructor() {
                 this.lives = 20;
                 this.money = 900; 
+                this.level = 1;
                 this.wave = 1;
+                
+                // 動態地圖尺寸
+                this.gridW = 20;
+                this.gridH = 15;
+
                 this.enemies = [];
-                this.worms = []; // 菜蟲列表
+                this.worms = []; 
+                this.loggers = []; // 伐木工
                 this.towers = [];
                 this.plants = []; 
                 this.projectiles = [];
                 this.particles = [];
                 this.animals = []; 
-                this.decorations = [];
+                this.decorations = []; // 包含樹木
                 this.waveActive = false;
                 this.spawnQueue = [];
                 this.clock = new THREE.Clock();
@@ -353,12 +368,11 @@
 
                 this.scene = new THREE.Scene();
                 this.scene.background = new THREE.Color(0x4fc3f7); 
-                this.scene.fog = new THREE.Fog(0x4fc3f7, 60, 200);
+                this.scene.fog = new THREE.Fog(0x4fc3f7, 60, 250);
 
                 const aspect = window.innerWidth / window.innerHeight;
-                this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
-                this.camera.position.set(GRID_W * TILE_SIZE / 2, 80, 80); 
-                this.camera.lookAt(GRID_W * TILE_SIZE / 2, 0, GRID_H * TILE_SIZE / 2);
+                this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 800);
+                this.updateCameraPos();
 
                 this.renderer = new THREE.WebGLRenderer({ antialias: true });
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -379,7 +393,7 @@
                 this.scene.add(spotLight);
 
                 this.grid = []; 
-                this.createMap();
+                this.createMap(); // 初始地圖
                 this.createDecorations(); 
                 this.initAnimals();       
 
@@ -414,6 +428,37 @@
                 this.animate();
             }
 
+            updateCameraPos() {
+                // 根據地圖大小調整相機位置
+                const cx = this.gridW * TILE_SIZE / 2;
+                const cz = this.gridH * TILE_SIZE / 2;
+                const zoom = Math.max(this.gridW, this.gridH) * 3.5;
+                this.camera.position.set(cx, zoom, cz + zoom * 0.5); 
+                this.camera.lookAt(cx, 0, cz);
+            }
+
+            // 動態路徑生成
+            getPaths() {
+                const W = this.gridW;
+                const H = this.gridH;
+                const cX = Math.floor(W/2);
+                const cZ = Math.floor(H/2);
+                // 終點：靠近右下
+                const end = { x: W-2, z: H-2 };
+
+                // 簡單的折線路徑，隨地圖大小變化
+                return [
+                    // WEST
+                    [{x:0, z:2}, {x:5, z:2}, {x:5, z:H-5}, {x:W-5, z:H-5}, {x:W-5, z:end.z}, end],
+                    // NORTH
+                    [{x:8, z:0}, {x:8, z:5}, {x:W-5, z:5}, {x:W-5, z:end.z}, end],
+                    // SOUTH
+                    [{x:5, z:H-1}, {x:5, z:H-5}, {x:cX, z:H-5}, {x:cX, z:end.z}, end],
+                    // EAST
+                    [{x:W-1, z:4}, {x:W-4, z:4}, {x:W-4, z:H-5}, {x:W-2, z:H-5}, end]
+                ];
+            }
+
             togglePause() {
                 this.isPaused = !this.isPaused;
                 const btn = document.getElementById('pause-btn');
@@ -430,25 +475,40 @@
             }
 
             createMap() {
-                const floorGeo = new THREE.PlaneGeometry(GRID_W * TILE_SIZE * 2, GRID_H * TILE_SIZE * 2);
+                // 清理舊的地板
+                if(this.floorMesh) this.scene.remove(this.floorMesh);
+                // 清理舊的格網
+                if(this.grid.length > 0) {
+                    for(let x=0; x<this.grid.length; x++) {
+                        for(let z=0; z<this.grid[x].length; z++) {
+                            if(this.grid[x][z] && this.grid[x][z].mesh) this.scene.remove(this.grid[x][z].mesh);
+                        }
+                    }
+                }
+
+                const floorGeo = new THREE.PlaneGeometry(this.gridW * TILE_SIZE * 2, this.gridH * TILE_SIZE * 2);
                 const floorMat = new THREE.MeshLambertMaterial({ color: 0x8bc34a }); 
-                const floor = new THREE.Mesh(floorGeo, floorMat);
-                floor.rotation.x = -Math.PI / 2;
-                floor.position.set(GRID_W*TILE_SIZE/2 - TILE_SIZE/2, -0.2, GRID_H*TILE_SIZE/2 - TILE_SIZE/2);
-                floor.receiveShadow = true;
-                this.scene.add(floor);
+                this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
+                this.floorMesh.rotation.x = -Math.PI / 2;
+                this.floorMesh.position.set(this.gridW*TILE_SIZE/2 - TILE_SIZE/2, -0.2, this.gridH*TILE_SIZE/2 - TILE_SIZE/2);
+                this.floorMesh.receiveShadow = true;
+                this.scene.add(this.floorMesh);
 
                 const matEmpty = new THREE.MeshLambertMaterial({ color: 0xc5e1a5 });
                 const matPath = new THREE.MeshLambertMaterial({ color: 0xffe0b2 });
                 
-                for(let x=0; x<GRID_W; x++) {
+                const paths = this.getPaths();
+
+                this.grid = [];
+                for(let x=0; x<this.gridW; x++) {
                     this.grid[x] = [];
-                    for(let z=0; z<GRID_H; z++) {
+                    for(let z=0; z<this.gridH; z++) {
                         let type = 0; 
-                        if (this.isPointOnPath(x, z, PATH_WEST) || this.isPointOnPath(x, z, PATH_NORTH) ||
-                            this.isPointOnPath(x, z, PATH_SOUTH) || this.isPointOnPath(x, z, PATH_EAST)) {
-                            type = 1;
+                        // 檢查是否在任何路徑上
+                        for(let p of paths) {
+                            if (this.isPointOnPath(x, z, p)) type = 1;
                         }
+
                         const h = type === 1 ? 0.2 : 0.5;
                         const geo = new THREE.BoxGeometry(TILE_SIZE * 0.95, h, TILE_SIZE * 0.95);
                         const mat = type === 1 ? matPath : matEmpty;
@@ -461,31 +521,43 @@
                     }
                 }
 
-                const endP = {x: 18, z: 12};
-                const endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
-                endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
-                endBase.castShadow = true;
-                this.scene.add(endBase);
+                // 終點
+                const endP = paths[0][paths[0].length-1];
+                if(this.endBase) this.scene.remove(this.endBase);
+                this.endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
+                this.endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
+                this.endBase.castShadow = true;
+                this.scene.add(this.endBase);
                 
-                const startPoints = [PATH_WEST[0], PATH_NORTH[0], PATH_SOUTH[0], PATH_EAST[0]];
-                startPoints.forEach(start => {
+                // 起點
+                if(this.startPoints) this.startPoints.forEach(s => this.scene.remove(s));
+                this.startPoints = [];
+                paths.forEach(p => {
+                    const start = p[0];
                     const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x76ff03}));
                     startM.position.set(start.x * TILE_SIZE, 0.5, start.z * TILE_SIZE);
                     this.scene.add(startM);
+                    this.startPoints.push(startM);
                 });
             }
 
             createDecorations() {
+                // 清理舊的
+                this.decorations.forEach(d => this.scene.remove(d.mesh));
+                this.decorations = [];
+
                 const trunkMat = new THREE.MeshLambertMaterial({color: 0x795548});
                 const leavesMat = new THREE.MeshLambertMaterial({color: 0x43a047});
                 const flowerColors = [0xffeb3b, 0xe91e63, 0x9c27b0, 0xffffff];
 
-                for(let x=0; x<GRID_W; x++) {
-                    for(let z=0; z<GRID_H; z++) {
+                for(let x=0; x<this.gridW; x++) {
+                    for(let z=0; z<this.gridH; z++) {
                         if (this.grid[x][z].type === 0 && Math.random() > 0.7) {
                             const posX = x * TILE_SIZE;
                             const posZ = z * TILE_SIZE;
                             const rand = Math.random();
+                            
+                            // 樹木 (伐木工的目標)
                             if (rand > 0.6) {
                                 const tree = new THREE.Group();
                                 const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2), trunkMat);
@@ -498,7 +570,7 @@
                                 tree.rotation.y = Math.random() * Math.PI;
                                 tree.position.set(posX, 0.5, posZ);
                                 this.scene.add(tree);
-                                this.decorations.push(tree);
+                                this.decorations.push({ mesh: tree, type: 'tree', x: x, z: z }); // 標記為樹
                                 this.grid[x][z].hasDecoration = true;
                             } else {
                                 const flower = new THREE.Group();
@@ -510,7 +582,7 @@
                                 flower.add(stem, petal);
                                 flower.position.set(posX + (Math.random()-0.5)*2, 0.5, posZ + (Math.random()-0.5)*2);
                                 this.scene.add(flower);
-                                this.decorations.push(flower);
+                                this.decorations.push({ mesh: flower, type: 'flower' });
                             }
                         }
                     }
@@ -518,7 +590,10 @@
             }
 
             initAnimals() {
-                const animalLocs = [PATH_WEST[2], PATH_NORTH[2], PATH_SOUTH[2]];
+                this.animals.forEach(a => this.scene.remove(a.mesh));
+                this.animals = [];
+                const paths = this.getPaths();
+                const animalLocs = [paths[0][2], paths[1][2], paths[2][2]];
                 animalLocs.forEach(loc => {
                     const animal = new Animal(loc.x, loc.z);
                     this.scene.add(animal.mesh);
@@ -568,8 +643,8 @@
 
             getRandomFreeTile() {
                 const freeTiles = [];
-                for(let x=0; x<GRID_W; x++) {
-                    for(let z=0; z<GRID_H; z++) {
+                for(let x=0; x<this.gridW; x++) {
+                    for(let z=0; z<this.gridH; z++) {
                         const cell = this.grid[x][z];
                         if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
                             freeTiles.push({x, z});
@@ -580,10 +655,10 @@
                     const t = freeTiles[Math.floor(Math.random() * freeTiles.length)];
                     return { x: t.x * TILE_SIZE, z: t.z * TILE_SIZE };
                 }
-                return { x: Math.random() * GRID_W * TILE_SIZE, z: Math.random() * GRID_H * TILE_SIZE };
+                return { x: Math.random() * this.gridW * TILE_SIZE, z: Math.random() * this.gridH * TILE_SIZE };
             }
 
-            // --- 菜蟲生成系統 ---
+            // --- 菜蟲生成 ---
             spawnWorm() {
                 const startPos = this.getRandomFreeTile();
                 const worm = new Worm(startPos.x, startPos.z);
@@ -596,13 +671,11 @@
                 const idx = this.worms.indexOf(worm);
                 if (idx > -1) this.worms.splice(idx, 1);
                 
-                // 獎勵
                 this.money += 20;
                 this.updateUI();
                 AudioSys.squish();
                 this.particles.push(new EffectParticle(worm.mesh.position.x, 1, worm.mesh.position.z, 0x76ff03, 'burst', 0.5));
                 
-                // 浮動文字
                 const text = document.createElement('div');
                 text.className = 'float-text';
                 text.style.color = '#76ff03';
@@ -618,14 +691,50 @@
                 setTimeout(() => text.remove(), 1000);
             }
 
+            // --- 伐木工生成 ---
+            spawnLogger() {
+                const startPos = this.getRandomFreeTile();
+                const logger = new Lumberjack(startPos.x, startPos.z);
+                this.loggers.push(logger);
+                this.scene.add(logger.mesh);
+            }
+
+            // 關卡切換邏輯
+            startNextLevel() {
+                document.getElementById('level-up-overlay').style.display = 'none';
+                
+                // 擴張地圖 1/3
+                this.gridW = Math.floor(this.gridW * 1.33);
+                this.gridH = Math.floor(this.gridH * 1.33);
+                this.level++;
+                this.wave = 1;
+                
+                // 重置場景但保留金錢
+                this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
+                this.towers.forEach(t => this.scene.remove(t.mesh)); this.towers = [];
+                this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
+                this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
+                this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
+                this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
+                
+                // 重建
+                this.createMap();
+                this.createDecorations();
+                this.initAnimals();
+                this.updateCameraPos();
+                
+                document.getElementById('level-txt').innerText = this.level;
+                this.updateUI();
+            }
+
             nextWave() {
                 if(this.waveActive) return;
                 this.waveActive = true;
                 document.getElementById('next-wave-btn').disabled = true;
 
-                const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
+                const activePaths = this.getPaths();
                 const groups = 8 + Math.floor(this.wave * 2); 
-                const hpMult = Math.pow(1.5, this.wave - 1); 
+                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1); // 難度隨Level和Wave增加
                 let spawnDelayBase = Math.max(10, 35 - (this.wave * 2));
 
                 for(let i=0; i<groups; i++) {
@@ -658,9 +767,9 @@
                 
                 this.bossesRemainingInWave--; 
                 
-                const activePaths = [PATH_WEST, PATH_NORTH, PATH_SOUTH, PATH_EAST];
+                const activePaths = this.getPaths();
                 const bossPath = activePaths[Math.floor(Math.random() * 4)]; 
-                const hpMult = Math.pow(1.5, this.wave - 1);
+                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
 
                 this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
                 
@@ -705,39 +814,42 @@
 
                 if (this.waveActive) {
                     this.spawnEnemy();
+                    // 檢查波次結束
                     if (this.spawnQueue.length === 0 && this.enemies.length === 0 && this.bossesRemainingInWave === 0) {
-                        this.endWave();
+                        // 如果這波有 Boss 且全部打完，觸發關卡結束
+                        // 這裡簡化為：每打完 5 波 升一關
+                        if (this.wave % 5 === 0) {
+                            document.getElementById('level-up-overlay').style.display = 'flex';
+                            this.waveActive = false; // 暫停等玩家點擊
+                        } else {
+                            this.endWave();
+                        }
                     }
                 }
 
-                // 隨機生成菜蟲 (機率與植物數量成正比)
                 if (Math.random() < 0.005 + (this.plants.length * 0.002)) {
-                    if (this.worms.length < 5 + this.plants.length) { // 限制總蟲數
-                        this.spawnWorm();
-                    }
+                    if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
+                }
+                
+                // 隨機生成伐木工 (機率低)
+                if (Math.random() < 0.003 && this.loggers.length < 3) {
+                    this.spawnLogger();
                 }
 
                 this.animals.forEach(a => a.update());
-
-                // 更新菜蟲
-                for (let i = this.worms.length - 1; i >= 0; i--) {
-                    this.worms[i].update(this.plants);
-                }
-
-                for (let i = this.plants.length - 1; i >= 0; i--) {
-                    this.plants[i].update();
-                }
+                for (let i = this.worms.length - 1; i >= 0; i--) this.worms[i].update(this.plants);
+                for (let i = this.loggers.length - 1; i >= 0; i--) this.loggers[i].update(this.decorations);
+                for (let i = this.plants.length - 1; i >= 0; i--) this.plants[i].update();
 
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     const e = this.enemies[i];
                     const status = e.update(this.animals, this.towers); 
-                    
                     if (status === 'REACHED') {
                         this.lives--;
                         AudioSys.error();
                         this.removeEnemy(e);
                         this.camera.position.x += (Math.random()-0.5); 
-                        setTimeout(()=>this.camera.position.x = GRID_W * TILE_SIZE / 2, 50);
+                        setTimeout(()=>this.camera.position.x = this.gridW * TILE_SIZE / 2, 50);
                         if(this.lives <= 0) this.gameOver("基地被摧毀");
                     }
                 }
@@ -776,7 +888,6 @@
                 if (e.type === 'BOSS' && this.bossesRemainingInWave > 0) {
                     this.spawnBossSequence(100); 
                 }
-
                 this.scene.remove(e.mesh);
                 e.dispose();
                 const idx = this.enemies.indexOf(e);
@@ -797,10 +908,8 @@
                 this.grid[t.gx][t.gz].tower = null;
                 const idx = this.towers.indexOf(t);
                 if (idx > -1) this.towers.splice(idx, 1);
-                
                 game.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xff0000, 'explode', 2));
                 AudioSys.towerDestroy();
-                
                 const msg = document.getElementById('tower-destroyed-msg');
                 msg.style.opacity = 1;
                 setTimeout(() => msg.style.opacity = 0, 1500);
@@ -809,23 +918,15 @@
 
             selectBuildType(type) {
                 document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('active'));
-                
                 if (type === null || this.buildType === type) {
                     this.buildType = null;
                     this.ghostMesh.visible = false;
                     this.rangeCircle.visible = false;
                     return;
                 }
-                
                 this.buildType = type;
-                document.getElementById(
-                    type === 'FRUIT' ? 'btn-fruit' : 
-                    type === 'VEGGIE' ? 'btn-veggie' : 
-                    `btn-${type.toLowerCase()}`
-                ).classList.add('active');
-                
+                document.getElementById(type === 'FRUIT' ? 'btn-fruit' : type === 'VEGGIE' ? 'btn-veggie' : `btn-${type.toLowerCase()}`).classList.add('active');
                 this.closePanel();
-                
                 const isFarm = FARM_DATA[type] !== undefined;
                 if (!isFarm) {
                     this.rangeCircle.visible = true;
@@ -853,14 +954,13 @@
 
             onMouseMove(e) {
                 const pos = this.getGridPos(e);
-                if (pos && pos.x >= 0 && pos.x < GRID_W && pos.z >= 0 && pos.z < GRID_H) {
+                if (pos && pos.x >= 0 && pos.x < this.gridW && pos.z >= 0 && pos.z < this.gridH) {
                     if (this.buildType) {
                         this.ghostMesh.position.set(pos.worldX, 1, pos.worldZ);
                         this.ghostMesh.visible = true;
                         const cell = this.grid[pos.x][pos.z];
                         const canBuild = cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration;
                         this.ghostMesh.children[0].material.color.setHex(canBuild ? 0x76ff03 : 0xff1744);
-                        
                         if (TOWER_DATA[this.buildType]) {
                             this.rangeCircle.position.set(pos.worldX, 1, pos.worldZ);
                         }
@@ -872,50 +972,34 @@
 
             onClick(e) {
                 if (e.target.closest('button') || e.target.closest('.tower-card')) return;
-
-                // 優先檢測點擊菜蟲
                 this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
                 this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
                 this.raycaster.setFromCamera(this.mouse, this.camera);
                 const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
                 if (wormIntersects.length > 0) {
-                    // 找到對應的 worm 物件
-                    const clickedMesh = wormIntersects[0].object.parent; // mesh is Group or part of Group
+                    const clickedMesh = wormIntersects[0].object.parent; 
                     const worm = this.worms.find(w => w.mesh === clickedMesh || w.mesh.children.includes(clickedMesh));
-                    if (worm) {
-                        this.catchWorm(worm);
-                        return;
-                    }
+                    if (worm) { this.catchWorm(worm); return; }
                 }
 
                 const pos = this.getGridPos(e);
-                if (!pos || pos.x < 0 || pos.x >= GRID_W || pos.z < 0 || pos.z >= GRID_H) return;
+                if (!pos || pos.x < 0 || pos.x >= this.gridW || pos.z < 0 || pos.z >= this.gridH) return;
                 const cell = this.grid[pos.x][pos.z];
 
                 if (this.buildType) {
                     if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
                         if (FARM_DATA[this.buildType]) {
-                            if (this.money >= FARM_DATA[this.buildType].cost) {
-                                this.buildPlant(pos.x, pos.z, this.buildType);
-                            } else {
-                                AudioSys.error();
-                            }
+                            if (this.money >= FARM_DATA[this.buildType].cost) this.buildPlant(pos.x, pos.z, this.buildType);
+                            else AudioSys.error();
                         } else {
-                            if (this.money >= TOWER_DATA[this.buildType].cost) {
-                                this.buildTower(pos.x, pos.z, this.buildType);
-                            } else {
-                                AudioSys.error();
-                            }
+                            if (this.money >= TOWER_DATA[this.buildType].cost) this.buildTower(pos.x, pos.z, this.buildType);
+                            else AudioSys.error();
                         }
                     }
                 } else {
-                    if (cell.plant) {
-                        cell.plant.tryHarvest();
-                    } else if (cell.tower) {
-                        this.selectTower(cell.tower);
-                    } else {
-                        this.closePanel();
-                    }
+                    if (cell.plant) cell.plant.tryHarvest();
+                    else if (cell.tower) this.selectTower(cell.tower);
+                    else this.closePanel();
                 }
             }
 
@@ -964,7 +1048,6 @@
                 document.getElementById('up-range').innerText = t.getRange();
                 document.getElementById('btn-upgrade').innerText = `升級 ($${cost})`;
                 document.getElementById('btn-upgrade').disabled = this.money < cost;
-                
                 document.getElementById('up-hp').innerText = Math.floor(t.hp);
                 document.getElementById('up-max-hp').innerText = t.maxHp;
                 document.getElementById('up-hp-bar').style.width = (t.hp / t.maxHp * 100) + '%';
@@ -1035,201 +1118,226 @@
         }
 
         // ==========================================
-        // 菜蟲類別 (新)
+        // 伐木工 (New)
+        // ==========================================
+        class Lumberjack {
+            constructor(x, z) {
+                this.mesh = new THREE.Group();
+                // 身體
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5), new THREE.MeshLambertMaterial({color: 0xd32f2f})); // 紅格子
+                body.position.y = 0.75;
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshLambertMaterial({color: 0xffccbc}));
+                head.position.y = 1.8;
+                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.8), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+                hat.position.y = 2.4;
+                // 斧頭
+                const axeHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshLambertMaterial({color: 0x8d6e63}));
+                axeHandle.rotation.x = Math.PI/2; axeHandle.position.set(0.5, 1, 0.5);
+                const axeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.4), new THREE.MeshLambertMaterial({color: 0x90a4ae}));
+                axeBlade.position.set(0.5, 1, 1);
+                
+                this.mesh.add(body, head, hat, axeHandle, axeBlade);
+                this.mesh.position.set(x, 0, z);
+                this.mesh.castShadow = true;
+                this.axe = axeHandle; // 用於動畫
+
+                this.targetTree = null;
+                this.state = 'MOVING'; // MOVING, CHOPPING
+                this.timer = 0;
+                // 隨機 60~90 秒 (60fps * sec)
+                this.chopDuration = (60 + Math.random() * 30) * 60;
+                this.speed = 0.05;
+                
+                // 進度條
+                const barGroup = new THREE.Group();
+                const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.3), new THREE.MeshBasicMaterial({color: 0x333333}));
+                const fg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.2), new THREE.MeshBasicMaterial({color: 0xffab00}));
+                fg.position.z = 0.01;
+                barGroup.add(bg, fg);
+                barGroup.position.y = 3.5;
+                barGroup.visible = false;
+                this.progressBar = fg;
+                this.barGroup = barGroup;
+                this.mesh.add(barGroup);
+            }
+
+            update(decorations) {
+                // 讓進度條朝向相機
+                this.barGroup.lookAt(game.camera.position);
+
+                if (!this.targetTree) {
+                    // 尋找最近的樹
+                    let minDist = Infinity;
+                    let nearest = null;
+                    for (let d of decorations) {
+                        if (d.type === 'tree') {
+                            const dist = this.mesh.position.distanceTo(d.mesh.position);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearest = d;
+                            }
+                        }
+                    }
+                    this.targetTree = nearest;
+                    if(!nearest) {
+                        // 沒樹了，消失
+                        game.scene.remove(this.mesh);
+                        game.loggers = game.loggers.filter(l => l !== this);
+                        return;
+                    }
+                }
+
+                if (this.state === 'MOVING') {
+                    const targetPos = this.targetTree.mesh.position;
+                    const dist = this.mesh.position.distanceTo(targetPos);
+                    if (dist > 1.5) {
+                        this.mesh.lookAt(targetPos);
+                        this.mesh.translateZ(this.speed);
+                        // 走路動畫
+                        this.mesh.position.y = Math.sin(Date.now() * 0.01) * 0.1;
+                    } else {
+                        this.state = 'CHOPPING';
+                        this.barGroup.visible = true;
+                    }
+                } else if (this.state === 'CHOPPING') {
+                    this.timer++;
+                    
+                    // 砍樹動畫
+                    this.axe.rotation.x = Math.PI/2 + Math.sin(Date.now() * 0.01) * 0.5;
+                    
+                    // 更新進度條
+                    const progress = this.timer / this.chopDuration;
+                    this.progressBar.scale.x = progress;
+                    
+                    if (this.timer >= this.chopDuration) {
+                        this.finishJob();
+                    }
+                }
+            }
+
+            finishJob() {
+                // 移除樹木
+                game.scene.remove(this.targetTree.mesh);
+                game.grid[this.targetTree.x][this.targetTree.z].hasDecoration = false; // 解鎖該格
+                game.decorations = game.decorations.filter(d => d !== this.targetTree);
+                
+                // 給錢
+                game.money += 800;
+                game.updateUI();
+                AudioSys.harvest();
+                AudioSys.chop();
+
+                // 浮動文字
+                const text = document.createElement('div');
+                text.className = 'float-text wood';
+                text.innerText = `+$800 (木材)`;
+                const vec = this.mesh.position.clone();
+                vec.y += 3;
+                vec.project(game.camera);
+                const x = (vec.x * .5 + .5) * window.innerWidth;
+                const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                text.style.left = `${x}px`;
+                text.style.top = `${y}px`;
+                document.body.appendChild(text);
+                setTimeout(() => text.remove(), 1000);
+
+                // 伐木工離開
+                game.scene.remove(this.mesh);
+                game.loggers = game.loggers.filter(l => l !== this);
+                game.particles.push(new EffectParticle(this.mesh.position.x, 1, this.mesh.position.z, 0x795548, 'burst', 2));
+            }
+        }
+
+        // ==========================================
+        // 其他既有類別 (菜蟲、植物、動物等)
         // ==========================================
         class Worm {
             constructor(x, z) {
                 this.mesh = new THREE.Group();
-                // 身體 (3個小球)
                 const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03}));
                 const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x64dd17})); seg2.position.z = -0.4;
                 const seg3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03})); seg3.position.z = -0.8;
-                // 頭 (稍大)
                 const head = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshLambertMaterial({color: 0xccff90})); head.position.z = 0.4; head.position.y = 0.1;
-                // 眼睛
                 const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeL.position.set(-0.15, 0.2, 0.7);
                 const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeR.position.set(0.15, 0.2, 0.7);
-                
                 this.mesh.add(seg1, seg2, seg3, head, eyeL, eyeR);
                 this.mesh.position.set(x, 0.3, z);
                 this.mesh.castShadow = true;
-                
-                this.targetPlant = null;
-                this.speed = 0.03; // 爬得慢
-                this.eatingTimer = 0; // 倒數計時
+                this.targetPlant = null; this.speed = 0.03; this.eatingTimer = 0;
             }
-
             update(plants) {
-                // 如果沒有目標，找最近的植物
                 if (!this.targetPlant || !plants.includes(this.targetPlant)) {
-                    let minDist = Infinity;
-                    let nearest = null;
-                    for (let p of plants) {
-                        const d = this.mesh.position.distanceTo(p.mesh.position);
-                        if (d < minDist) {
-                            minDist = d;
-                            nearest = p;
-                        }
-                    }
+                    let minDist = Infinity; let nearest = null;
+                    for (let p of plants) { const d = this.mesh.position.distanceTo(p.mesh.position); if (d < minDist) { minDist = d; nearest = p; } }
                     this.targetPlant = nearest;
                 }
-
                 if (this.targetPlant) {
                     const targetPos = this.targetPlant.mesh.position;
                     const dist = this.mesh.position.distanceTo(targetPos);
-
-                    // 移動邏輯
                     if (dist > 1.0) {
-                        this.mesh.lookAt(targetPos);
-                        this.mesh.translateZ(this.speed);
-                        // 蠕動動畫
-                        this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.01) * 0.1;
+                        this.mesh.lookAt(targetPos); this.mesh.translateZ(this.speed); this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.01) * 0.1;
                     } else {
-                        // 抵達植物
-                        // 檢查植物是否成熟
                         if (this.targetPlant.growth >= this.targetPlant.maxGrowth) {
-                            // 開始吃
-                            this.eatingTimer++;
-                            // 視覺警告 (變紅)
-                            this.mesh.children.forEach(c => c.material.color.setHex(0xff0000));
-                            
-                            // 60幀 = 約1秒
-                            if (this.eatingTimer > 60) {
-                                this.eatPlant();
-                            }
-                        } else {
-                            // 等待成熟，恢復綠色
-                            this.mesh.children[0].material.color.setHex(0x76ff03); 
-                            this.eatingTimer = 0;
-                        }
+                            this.eatingTimer++; this.mesh.children.forEach(c => c.material.color.setHex(0xff0000));
+                            if (this.eatingTimer > 60) this.eatPlant();
+                        } else { this.mesh.children[0].material.color.setHex(0x76ff03); this.eatingTimer = 0; }
                     }
                 }
             }
-
             eatPlant() {
                 if (this.targetPlant) {
                     game.scene.remove(this.targetPlant.mesh);
                     game.grid[this.targetPlant.gx][this.targetPlant.gz].plant = null;
                     game.plants = game.plants.filter(p => p !== this.targetPlant);
-                    
-                    // 特效：植物被吃掉
                     game.particles.push(new EffectParticle(this.targetPlant.mesh.position.x, 1, this.targetPlant.mesh.position.z, 0x8bc34a, 'burst', 1.0));
-                    
-                    // 浮動文字提示
-                    const text = document.createElement('div');
-                    text.className = 'float-text bad';
-                    text.innerText = "被吃掉了!";
-                    const vec = this.mesh.position.clone();
-                    vec.y += 3;
-                    vec.project(game.camera);
-                    const x = (vec.x * .5 + .5) * window.innerWidth;
-                    const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                    text.style.left = `${x}px`;
-                    text.style.top = `${y}px`;
-                    document.body.appendChild(text);
-                    setTimeout(() => text.remove(), 1000);
-
-                    // 吃完後，蟲消失 (心滿意足離開)
-                    game.scene.remove(this.mesh);
-                    game.worms = game.worms.filter(w => w !== this);
+                    const text = document.createElement('div'); text.className = 'float-text bad'; text.innerText = "被吃掉了!";
+                    const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
+                    const x = (vec.x * .5 + .5) * window.innerWidth; const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                    text.style.left = `${x}px`; text.style.top = `${y}px`; document.body.appendChild(text); setTimeout(() => text.remove(), 1000);
+                    game.scene.remove(this.mesh); game.worms = game.worms.filter(w => w !== this);
                 }
             }
         }
 
-        // ==========================================
-        // 植物類別 (微調)
-        // ==========================================
         class Plant {
             constructor(gx, gz, type) {
-                this.gx = gx; this.gz = gz; this.type = type;
-                this.data = FARM_DATA[type];
-                this.growth = 0; 
-                this.maxGrowth = this.data.growTime;
-                
-                this.mesh = new THREE.Group();
-                this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
-
-                const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 8), new THREE.MeshLambertMaterial({color: 0x8bc34a}));
-                sprout.position.y = 0.5;
-                this.mesh.add(sprout);
-                this.visual = sprout; 
-
+                this.gx = gx; this.gz = gz; this.type = type; this.data = FARM_DATA[type]; this.growth = 0; this.maxGrowth = this.data.growTime;
+                this.mesh = new THREE.Group(); this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+                const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 8), new THREE.MeshLambertMaterial({color: 0x8bc34a})); sprout.position.y = 0.5; this.mesh.add(sprout); this.visual = sprout; 
                 if (type === 'FRUIT') {
-                    this.matureMesh = new THREE.Group();
-                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.5), new THREE.MeshLambertMaterial({color: 0x795548}));
-                    trunk.position.y = 0.75;
-                    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5), new THREE.MeshLambertMaterial({color: 0x4caf50}));
-                    leaves.position.y = 2.5;
+                    this.matureMesh = new THREE.Group(); const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.5), new THREE.MeshLambertMaterial({color: 0x795548})); trunk.position.y = 0.75;
+                    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5), new THREE.MeshLambertMaterial({color: 0x4caf50})); leaves.position.y = 2.5;
                     const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f1.position.set(0.8, 2.5, 0.5);
                     const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f2.position.set(-0.7, 3.0, -0.4);
                     const f3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f3.position.set(0.2, 2.2, -0.9);
                     this.matureMesh.add(trunk, leaves, f1, f2, f3);
                 } else {
-                    this.matureMesh = new THREE.Group();
-                    const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 8), new THREE.MeshLambertMaterial({color: 0xff9800}));
-                    pumpkin.scale.y = 0.7; pumpkin.position.y = 1;
-                    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5), new THREE.MeshLambertMaterial({color: 0x388e3c}));
-                    stem.position.y = 1.8;
-                    this.matureMesh.add(pumpkin, stem);
+                    this.matureMesh = new THREE.Group(); const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 8), new THREE.MeshLambertMaterial({color: 0xff9800})); pumpkin.scale.y = 0.7; pumpkin.position.y = 1;
+                    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5), new THREE.MeshLambertMaterial({color: 0x388e3c})); stem.position.y = 1.8; this.matureMesh.add(pumpkin, stem);
                 }
-                this.matureMesh.visible = false;
-                this.matureMesh.scale.set(0.1, 0.1, 0.1);
-                this.mesh.add(this.matureMesh);
+                this.matureMesh.visible = false; this.matureMesh.scale.set(0.1, 0.1, 0.1); this.mesh.add(this.matureMesh);
             }
-
             update() {
                 if (this.growth < this.maxGrowth) {
-                    this.growth++;
-                    const progress = this.growth / this.maxGrowth;
-                    
-                    if (progress < 0.5) {
-                        this.visual.scale.setScalar(1 + progress * 2);
-                    } else if (!this.matureMesh.visible) {
-                        this.visual.visible = false;
-                        this.matureMesh.visible = true;
-                    }
-
-                    if (this.matureMesh.visible && progress < 1) {
-                        const s = 0.1 + (progress - 0.5) * 2 * 0.9;
-                        this.matureMesh.scale.set(s, s, s);
-                    }
+                    this.growth++; const progress = this.growth / this.maxGrowth;
+                    if (progress < 0.5) { this.visual.scale.setScalar(1 + progress * 2); } else if (!this.matureMesh.visible) { this.visual.visible = false; this.matureMesh.visible = true; }
+                    if (this.matureMesh.visible && progress < 1) { const s = 0.1 + (progress - 0.5) * 2 * 0.9; this.matureMesh.scale.set(s, s, s); }
                 } else {
-                    const s = 1 + Math.sin(Date.now() * 0.005) * 0.1;
-                    this.matureMesh.scale.set(s, s, s);
-                    this.matureMesh.children.forEach(c => {
-                        if(c.material.emissive) c.material.emissive.setHex(0x333333);
-                    });
+                    const s = 1 + Math.sin(Date.now() * 0.005) * 0.1; this.matureMesh.scale.set(s, s, s);
+                    this.matureMesh.children.forEach(c => { if(c.material.emissive) c.material.emissive.setHex(0x333333); });
                 }
             }
-
             tryHarvest() {
-                // 如果正被菜蟲吃(紅色警戒狀態)，不一定能採收成功，但這版本允許採收以拯救作物
                 if (this.growth >= this.maxGrowth) {
-                    game.money += this.data.sell;
-                    AudioSys.harvest();
-                    
-                    const text = document.createElement('div');
-                    text.className = 'float-text';
-                    text.innerText = `+$${this.data.sell}`;
-                    const vec = this.mesh.position.clone();
-                    vec.y += 3;
-                    vec.project(game.camera);
-                    const x = (vec.x * .5 + .5) * window.innerWidth;
-                    const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                    text.style.left = `${x}px`;
-                    text.style.top = `${y}px`;
-                    document.body.appendChild(text);
-                    setTimeout(() => text.remove(), 1000);
-
-                    game.scene.remove(this.mesh);
-                    game.grid[this.gx][this.gz].plant = null;
-                    game.plants = game.plants.filter(p => p !== this);
+                    game.money += this.data.sell; AudioSys.harvest();
+                    const text = document.createElement('div'); text.className = 'float-text'; text.innerText = `+$${this.data.sell}`;
+                    const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
+                    const x = (vec.x * .5 + .5) * window.innerWidth; const y = (-(vec.y * .5) + .5) * window.innerHeight;
+                    text.style.left = `${x}px`; text.style.top = `${y}px`; document.body.appendChild(text); setTimeout(() => text.remove(), 1000);
+                    game.scene.remove(this.mesh); game.grid[this.gx][this.gz].plant = null; game.plants = game.plants.filter(p => p !== this);
                     game.particles.push(new EffectParticle(this.mesh.position.x, 2, this.mesh.position.z, 0xffd700, 'burst', 1.5));
-                    
                     game.updateUI();
-                } else {
-                    AudioSys.error();
-                }
+                } else { AudioSys.error(); }
             }
         }
 
@@ -1237,73 +1345,38 @@
             constructor(gx, gz) {
                 this.hpMax = 200; this.hp = this.hpMax;
                 this.mesh = new THREE.Group(); this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
-                const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), new THREE.MeshLambertMaterial({color: 0xffccbc})); 
-                body.position.y = 0.75; body.castShadow = true;
-                const earGeo = new THREE.BoxGeometry(0.5, 1, 0.5);
-                const earL = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earL.position.set(-0.6, 1.8, 0);
-                const earR = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earR.position.set(0.6, 1.8, 0);
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), new THREE.MeshLambertMaterial({color: 0xffccbc})); body.position.y = 0.75; body.castShadow = true;
+                const earGeo = new THREE.BoxGeometry(0.5, 1, 0.5); const earL = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earL.position.set(-0.6, 1.8, 0); const earR = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earR.position.set(0.6, 1.8, 0);
                 const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.2), new THREE.MeshLambertMaterial({color: 0xff5722})); nose.position.set(0, 1, 1);
                 this.mesh.add(body, earL, earR, nose);
-                const barContainer = new THREE.Group();
-                const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000}));
-                const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x29b6f6})); 
-                fg.position.z = 0.01; barContainer.add(bg, fg); barContainer.position.y = 3.5; this.hpBar = fg; this.mesh.add(barContainer);
-                this.animOffset = Math.random() * 100;
+                const barContainer = new THREE.Group(); const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000})); const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x29b6f6})); fg.position.z = 0.01; barContainer.add(bg, fg); barContainer.position.y = 3.5; this.hpBar = fg; this.mesh.add(barContainer);
                 this.onBeforeRender = () => { barContainer.lookAt(game.camera.position); };
             }
-            update() {
-                const time = Date.now() * 0.005 + this.animOffset;
-                this.mesh.children[0].position.y = 0.75 + Math.sin(time) * 0.1;
-                this.mesh.children[0].rotation.y = Math.sin(time * 0.5) * 0.1;
-            }
+            update() { const time = Date.now() * 0.005; this.mesh.children[0].position.y = 0.75 + Math.sin(time) * 0.1; this.mesh.children[0].rotation.y = Math.sin(time * 0.5) * 0.1; }
             updateBar() { const pct = Math.max(0, this.hp / this.hpMax); this.hpBar.scale.x = pct; }
             takeDamage(amt) { this.hp -= amt; this.updateBar(); if (this.hp <= 0) game.removeAnimal(this); }
         }
 
         class Enemy {
             constructor(opts) {
-                // 解構參數
-                this.type = opts.type;
-                this.path = opts.path || []; // 突襲模式可能沒有 path
-                this.pathIdx = 0;
-                const hpMult = opts.hpMult || 1;
-                
-                // 屬性初始化
+                this.type = opts.type; this.path = opts.path || []; this.pathIdx = 0; const hpMult = opts.hpMult || 1;
                 this.hpMax = 50 * hpMult; this.speed = 0.08; this.color = 0xffffff; this.reward = 15;
                 this.isSlowed = 0; this.flyHeight = 0; this.attackCooldown = 0; this.damage = 4; 
                 this.defense = Math.floor(game.wave * 0.8) + 1; this.attackRange = 3; 
-                
-                // 突襲模式屬性
-                this.isStationary = false;
-                if (opts.spawnLoc) {
-                    this.isStationary = true;
-                    // 傳入的 spawnLoc
-                    this.spawnPos = opts.spawnLoc;
-                }
-
+                this.isStationary = false; if (opts.spawnLoc) { this.isStationary = true; this.spawnPos = opts.spawnLoc; }
                 let geo;
                 if (this.type === 'NORMAL') { geo = new THREE.DodecahedronGeometry(1.5); this.color = 0x5c6bc0; this.speed = 0.08; }
                 else if (this.type === 'FAST') { geo = new THREE.ConeGeometry(1, 2.5, 8); this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult; this.attackRange = 2; this.damage = 3; }
                 else if (this.type === 'TANK') { geo = new THREE.BoxGeometry(2.5, 2.5, 2.5); this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 10; this.defense += 3; this.attackRange = 5; }
                 else if (this.type === 'SHOOTER') { geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8); this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; this.damage = 8; this.attackRange = 18; }
                 else if (this.type === 'BOMBER') { geo = new THREE.IcosahedronGeometry(1.8, 1); this.color = 0x212121; this.speed = 0.05; this.hpMax = 80 * hpMult; this.attackRange = 6; this.defense += 5; this.reward = 50; }
-                else if (this.type === 'FLYING') { geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6); this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25; const startP = {x: 0, z: Math.random() * GRID_H}; this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE); const endP = {x: 18, z: 12}; this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE); }
+                else if (this.type === 'FLYING') { geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6); this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25; const startP = {x: 0, z: Math.random() * game.gridH}; this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE); const endP = {x: game.gridW-2, z: game.gridH-2}; this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE); }
                 else if (this.type === 'BOSS') { geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8); this.color = 0xffd700; this.speed = 0.03; this.hpMax = 50 * hpMult * 30; this.reward = 500; this.defense += 10; this.damage = 50; this.attackRange = 4; }
-                
                 this.hp = this.hpMax;
                 this.mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: this.color })); this.mesh.castShadow = true;
-                
-                // 位置初始化
-                if (this.isStationary) {
-                    // 突襲模式：直接生在空地
-                    this.mesh.position.set(this.spawnPos.x + TILE_SIZE/2, 1.5, this.spawnPos.z + TILE_SIZE/2);
-                } else if (this.type === 'FLYING') { 
-                    this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); 
-                } else { 
-                    // 正常走路模式
-                    const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); 
-                }
-                
+                if (this.isStationary) { this.mesh.position.set(this.spawnPos.x + TILE_SIZE/2, 1.5, this.spawnPos.z + TILE_SIZE/2); }
+                else if (this.type === 'FLYING') { this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); }
+                else { const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); }
                 if (this.type === 'BOSS') { this.mesh.scale.set(1.5, 1.5, 1.5); this.mesh.position.y = 3; }
                 const barContainer = new THREE.Group(); const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000})); const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x76ff03})); fg.position.z = 0.01; barContainer.add(bg, fg); barContainer.position.y = this.type === 'BOSS' ? 5 : 3; this.hpBar = fg; this.mesh.add(barContainer);
                 this.onBeforeRender = () => { barContainer.lookAt(game.camera.position); };
@@ -1335,13 +1408,7 @@
                         }
                     }
                 }
-                
-                // 如果是定點突襲單位，就不移動，只負責攻擊
-                if (this.isStationary) {
-                    this.mesh.children[0].lookAt(game.camera.position); 
-                    return 'STATIONARY';
-                }
-
+                if (this.isStationary) { this.mesh.children[0].lookAt(game.camera.position); return 'STATIONARY'; }
                 if (this.type === 'FLYING') {
                     const dir = new THREE.Vector3().subVectors(this.customTarget, this.mesh.position).normalize(); this.mesh.position.add(dir.multiplyScalar(currentSpeed * TILE_SIZE));
                     if (this.mesh.position.distanceTo(this.customTarget) < 1) return 'REACHED';
