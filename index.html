@@ -1,1882 +1,1973 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 極限塔防 - 農場保衛戰 (活潑動物版)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <style>
-        :root {
-            --accent: #ff6d00;
-            --bg-ui: rgba(255, 255, 255, 0.95);
-            --text-color: #333;
-        }
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #4fc3f7; color: var(--text-color); }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 極限塔防 - 農場保衛戰 (v2.0)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column;
-            justify-content: space-between; padding: 20px; box-sizing: border-box;
-        }
+  <style>
+    :root {
+      --accent: #ff6d00;
+      --bg-ui: rgba(255, 255, 255, 0.95);
+      --text-color: #333;
+    }
+    body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #4fc3f7; color: var(--text-color); }
 
-        #top-bar {
-            display: flex; gap: 15px; background: var(--bg-ui); padding: 12px 25px;
-            border-radius: 50px; pointer-events: auto; border-bottom: 4px solid var(--accent);
-            align-self: center; font-weight: bold; font-size: 1.2em;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.15); color: #444;
-            align-items: center; flex-wrap: wrap;
-        }
-        .stat { display: flex; align-items: center; gap: 5px; }
-        .stat span { color: #d32f2f; font-family: monospace; font-size: 1.2em; }
-        .stat.money span { color: #f57f17; }
-        .stat.animals span { color: #0277bd; }
+    /* UI Layer */
+    #ui-layer{
+      position:absolute; inset:0;
+      display:flex; flex-direction:column;
+      align-items:center;
+      pointer-events:none; /* 重要：讓3D畫面可點，UI內元件再開啟 pointer */
+      z-index: 900;
+    }
 
-        .icon-btn {
-            background: #eee; border: none; border-radius: 50%;
-            width: 35px; height: 35px; cursor: pointer; font-weight: bold; font-size: 1.2em;
-            display: flex; justify-content: center; align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: transform 0.1s, background 0.2s; margin-left: 5px;
-        }
-        .icon-btn:active { transform: scale(0.9); }
+    #top-bar {
+      margin-top: 12px;
+      display: flex; gap: 15px; background: var(--bg-ui); padding: 12px 25px;
+      border-radius: 50px; pointer-events: auto; border-bottom: 4px solid var(--accent);
+      align-self: center; font-weight: bold; font-size: 1.2em;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.15); color: #444;
+      align-items: center; flex-wrap: wrap;
+      position: relative;
+      z-index: 901;
+    }
+    .stat { display: flex; align-items: center; gap: 5px; }
+    .stat span { color: #d32f2f; font-family: monospace; font-size: 1.2em; }
+    .stat.money span { color: #f57f17; }
+    .stat.animals span { color: #0277bd; }
 
-        #heal-btn { background: #00e676; color: white; }
-        #heal-btn:hover { background: #00c853; }
+    .icon-btn {
+      background: #eee; border: none; border-radius: 50%;
+      width: 35px; height: 35px; cursor: pointer; font-weight: bold; font-size: 1.2em;
+      display: flex; justify-content: center; align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: transform 0.1s, background 0.2s; margin-left: 5px;
+    }
+    .icon-btn:active { transform: scale(0.9); }
 
-        #bgm-toggle.active { background: #76ff03; color: #33691e; }
+    #heal-btn { background: #00e676; color: white; }
+    #heal-btn:hover { background: #00c853; }
 
-        #pause-btn { background: #ffeb3b; color: #f57f17; }
-        #pause-btn:hover { background: #fdd835; }
-        #pause-btn.paused { background: #ff9800; color: white; animation: pulse 1s infinite; z-index: 1001; position: relative; }
+    #bgm-toggle.active { background: #76ff03; color: #33691e; }
 
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    #pause-btn { background: #ffeb3b; color: #f57f17; position: relative; z-index: 1002; }
+    #pause-btn:hover { background: #fdd835; }
+    #pause-btn.paused { background: #ff9800; color: white; animation: pulse 1s infinite; }
 
-        .heal-cost { font-size: 0.6em; color: #666; margin-left: 2px; margin-right: 10px; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
-        #bottom-controls {
-            display: flex; justify-content: center; align-items: flex-end; gap: 10px;
-            pointer-events: auto; margin-bottom: 20px; flex-wrap: wrap;
-        }
+    .heal-cost { font-size: 0.6em; color: #666; margin-left: 2px; margin-right: 10px; }
 
-        .control-group {
-            display: flex; gap: 10px; background: rgba(255,255,255,0.5);
-            padding: 10px; border-radius: 20px; backdrop-filter: blur(5px);
-        }
+    #bottom-controls {
+      position:absolute;
+      left:0; right:0; bottom:0;
+      display: flex; justify-content: center; align-items: flex-end; gap: 10px;
+      pointer-events: auto; margin-bottom: 20px; flex-wrap: wrap;
+      z-index: 901;
+    }
 
-        .tower-card {
-            background: var(--bg-ui); width: 85px; padding: 8px; border-radius: 12px;
-            text-align: center; cursor: pointer; transition: all 0.2s; border: 3px solid #fff;
-            position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        .tower-card:hover { transform: translateY(-8px); border-color: var(--accent); }
-        .tower-card.active { border-color: var(--accent); background: #fff3e0; transform: translateY(-8px); }
-        .tower-card.farm { border-color: #aed581; }
-        .tower-card.farm.active { border-color: #76ff03; background: #f1f8e9; }
+    .control-group {
+      display: flex; gap: 10px; background: rgba(255,255,255,0.5);
+      padding: 10px; border-radius: 20px; backdrop-filter: blur(5px);
+    }
 
-        .tower-icon {
-            width: 40px; height: 40px; margin: 0 auto 5px; border-radius: 10px;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.1); display: flex;
-            justify-content: center; align-items: center; font-size: 20px;
-            border: 2px solid rgba(0,0,0,0.05);
-        }
-        .tower-cost { color: #e65100; font-weight: bold; font-size: 0.85em; }
-        .tower-name { font-size: 0.75em; margin-bottom: 2px; color: #555; }
+    .tower-card {
+      background: var(--bg-ui); width: 85px; padding: 8px; border-radius: 12px;
+      text-align: center; cursor: pointer; transition: all 0.2s; border: 3px solid #fff;
+      position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      user-select:none;
+    }
+    .tower-card:hover { transform: translateY(-8px); border-color: var(--accent); }
+    .tower-card.active { border-color: var(--accent); background: #fff3e0; transform: translateY(-8px); }
+    .tower-card.farm { border-color: #aed581; }
+    .tower-card.farm.active { border-color: #76ff03; background: #f1f8e9; }
 
-        .action-btn {
-            background: linear-gradient(45deg, #ff6d00, #ff9100); color: white; border: none;
-            padding: 15px 30px; border-radius: 50px; font-size: 1.1em; font-weight: bold;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(255, 109, 0, 0.4);
-            transition: transform 0.1s; pointer-events: auto; height: 70px;
-            align-self: center;
-        }
-        .action-btn:active { transform: scale(0.95); }
-        .action-btn:disabled { background: #ccc; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
+    .tower-icon {
+      width: 40px; height: 40px; margin: 0 auto 5px; border-radius: 10px;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.1); display: flex;
+      justify-content: center; align-items: center; font-size: 20px;
+      border: 2px solid rgba(0,0,0,0.05);
+    }
+    .tower-cost { color: #e65100; font-weight: bold; font-size: 0.85em; }
+    .tower-name { font-size: 0.75em; margin-bottom: 2px; color: #555; }
 
-        #upgrade-panel {
-            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
-            background: var(--bg-ui); padding: 20px; border-radius: 20px; width: 240px;
-            pointer-events: auto; display: none; border: 2px solid #fff;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-        }
-        .up-info { margin-bottom: 15px; line-height: 1.6; font-size: 0.95em; color: #555; }
-        .up-val { color: #0277bd; font-weight: bold; float: right; }
-        .up-btn { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .btn-upgrade { background: #43a047; } .btn-upgrade:hover { background: #2e7d32; }
-        .btn-sell { background: #e53935; } .btn-sell:hover { background: #c62828; }
-        .btn-close { background: #78909c; }
+    .action-btn {
+      background: linear-gradient(45deg, #ff6d00, #ff9100); color: white; border: none;
+      padding: 15px 30px; border-radius: 50px; font-size: 1.1em; font-weight: bold;
+      cursor: pointer; box-shadow: 0 5px 15px rgba(255, 109, 0, 0.4);
+      transition: transform 0.1s; pointer-events: auto; height: 70px;
+      align-self: center;
+    }
+    .action-btn:active { transform: scale(0.95); }
+    .action-btn:disabled { background: #ccc; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
 
-        #game-over {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); display: none;
-            justify-content: center; align-items: center; flex-direction: column;
-            color: white; z-index: 999; pointer-events: auto; backdrop-filter: blur(5px);
-        }
-        h1 { margin: 0; font-size: 5em; color: #ffeb3b; text-shadow: 0 0 20px #ff6d00; text-transform: uppercase; letter-spacing: 5px; }
+    #upgrade-panel {
+      position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+      background: var(--bg-ui); padding: 20px; border-radius: 20px; width: 240px;
+      pointer-events: auto; display: none; border: 2px solid #fff;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+      z-index: 901;
+    }
+    .up-info { margin-bottom: 15px; line-height: 1.6; font-size: 0.95em; color: #555; }
+    .up-val { color: #0277bd; font-weight: bold; float: right; }
+    .up-btn { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .btn-upgrade { background: #43a047; } .btn-upgrade:hover { background: #2e7d32; }
+    .btn-sell { background: #e53935; } .btn-sell:hover { background: #c62828; }
+    .btn-close { background: #78909c; }
 
-        .diff-tag {
-            position: absolute; top: 10px; left: 10px;
-            background: rgba(255,255,255,0.9); color: #d50000;
-            padding: 5px 15px; border-radius: 20px; font-size: 0.9em;
-            pointer-events: auto; font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
+    #game-over {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85); display: none;
+      justify-content: center; align-items: center; flex-direction: column;
+      color: white; z-index: 999; pointer-events: auto; backdrop-filter: blur(5px);
+    }
+    h1 { margin: 0; font-size: 5em; color: #ffeb3b; text-shadow: 0 0 20px #ff6d00; text-transform: uppercase; letter-spacing: 5px; }
 
-        #tower-destroyed-msg {
-            position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
-            color: red; font-weight: bold; font-size: 2em; text-shadow: 0 0 10px white;
-            opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 900;
-        }
+    .diff-tag {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255,255,255,0.9); color: #d50000;
+      padding: 5px 15px; border-radius: 20px; font-size: 0.9em;
+      pointer-events: auto; font-weight: bold;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      z-index: 950;
+    }
 
-        .hp-bar-bg { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin-top: 5px; overflow: hidden; }
-        .hp-bar-fill { height: 100%; background: #00e676; width: 100%; transition: width 0.2s; }
+    #tower-destroyed-msg {
+      position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+      color: red; font-weight: bold; font-size: 2em; text-shadow: 0 0 10px white;
+      opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 950;
+    }
 
-        .float-text {
-            position: absolute; color: #ffd740; font-weight: bold; font-size: 1.5em;
-            text-shadow: 0 0 5px black; pointer-events: none; animation: floatUp 1s forwards;
-        }
-        .float-text.bad { color: #ff1744; font-size: 1.8em; }
-        .float-text.wood { color: #795548; font-size: 1.8em; }
-        @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
+    .hp-bar-bg { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+    .hp-bar-fill { height: 100%; background: #00e676; width: 100%; transition: width 0.2s; }
 
-        /* 暫停遮罩：鎖住所有操作(除了暫停按鈕自己) */
-        #pause-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.35);
-            pointer-events: auto; /* 讓遮罩吃掉滑鼠事件 */
-            display: none;
-            justify-content: center; align-items: center; color: white; font-size: 3em; font-weight: bold;
-            text-shadow: 0 0 20px black; z-index: 1000;
-        }
+    .float-text {
+      position: absolute; color: #ffd740; font-weight: bold; font-size: 1.5em;
+      text-shadow: 0 0 5px black; pointer-events: none; animation: floatUp 1s forwards;
+      z-index: 980;
+    }
+    .float-text.bad { color: #ff1744; font-size: 1.8em; }
+    .float-text.wood { color: #795548; font-size: 1.8em; }
+    @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
 
-        #level-up-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); display: none; z-index: 950;
-            justify-content: center; align-items: center; flex-direction: column; color: white;
-        }
+    /* ✅ 暫停遮罩：擋住 3D 點擊，但不擋 UI (UI z-index > 900) */
+    #pause-overlay{
+      position: fixed; inset: 0;
+      display: none;
+      justify-content: center; align-items: center;
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      font-size: 2em;
+      font-weight: 900;
+      z-index: 800;
+      pointer-events: auto;
+      backdrop-filter: blur(3px);
+      user-select:none;
+    }
 
-        /* 暫停時 UI 視覺降噪 */
-        .paused-dim { opacity: 0.6; filter: grayscale(0.2); }
-        .paused-lock { pointer-events: none !important; }
-    </style>
+    /* ✅ 100 秒倒數 HUD */
+    #auto-start-hud{
+      position: absolute;
+      top: 78px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-weight: bold;
+      font-size: 1.1em;
+      z-index: 905;
+      pointer-events: none;
+      text-shadow: 0 0 10px rgba(0,0,0,0.6);
+      display: block;
+    }
+    #auto-start-hud .num{
+      color: #ffeb3b;
+      font-family: monospace;
+      font-size: 1.2em;
+      margin: 0 4px;
+    }
+
+    /* 暫停時 UI 視覺降噪 + 鎖定 */
+    .paused-dim { opacity: 0.6; filter: grayscale(0.2); }
+    .paused-lock { pointer-events: none !important; }
+  </style>
 </head>
+
 <body>
+  <div class="diff-tag">任務: 保護活潑的小動物 | 抓菜蟲 | 伐木</div>
+  <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
-    <div class="diff-tag">任務: 保護活潑的小動物 | 抓菜蟲 | 伐木</div>
-    <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
-    <div id="pause-overlay">已暫停</div>
+  <!-- ✅ 100 秒倒數 -->
+  <div id="auto-start-hud">⏳ 自動開戰倒數 <span class="num" id="auto-start-txt">100</span> 秒（到 0 直接開打）</div>
 
-    <div id="level-up-overlay">
-        <h1 style="color:#76ff03">關卡完成!</h1>
-        <p style="font-size:1.5em" id="levelup-info">地圖擴張 +20%</p>
-        <button class="action-btn" onclick="game.startNextLevel()">進入下一關</button>
+  <!-- ✅ 暫停遮罩 -->
+  <div id="pause-overlay">已暫停</div>
+
+  <div id="level-up-overlay" style="position:fixed; inset:0; display:none; z-index:998; background:rgba(0,0,0,0.75); color:#fff; justify-content:center; align-items:center; flex-direction:column; backdrop-filter: blur(4px);">
+    <h1 style="color:#76ff03">關卡完成!</h1>
+    <p style="font-size:1.5em" id="levelup-info">地圖擴張 +20%</p>
+    <button class="action-btn" onclick="game.startNextLevel()">進入下一關</button>
+  </div>
+
+  <div id="ui-layer">
+    <div id="top-bar">
+      <div class="stat">關卡: <span id="level-txt">1</span></div>
+      <div class="stat">❤️ <span id="lives-txt">20</span></div>
+      <div class="stat money">💰 <span id="money-txt">900</span></div>
+      <div class="stat animals" style="margin-right:0;">🐰 <span id="animals-txt">3</span></div>
+
+      <div style="display:flex; align-items:center;">
+        <button id="heal-btn" class="icon-btn" onclick="game.healAnimals()" title="花費 $500 治療所有小動物">✚</button>
+        <span class="heal-cost">($500)</span>
+      </div>
+
+      <div class="stat" style="margin-left: 10px;">🌊 <span id="wave-txt">1</span></div>
+      <div class="stat">👾 <span id="enemies-txt">0</span></div>
+      <div style="flex:1;"></div>
+      <button id="pause-btn" class="icon-btn" onclick="game.togglePause()" title="暫停遊戲">⏸️</button>
+      <button id="bgm-toggle" class="icon-btn" onclick="AudioSys.toggleBGM()" title="開關音樂">🎵</button>
     </div>
 
-    <div id="ui-layer">
-        <div id="top-bar">
-            <div class="stat">關卡: <span id="level-txt">1</span></div>
-            <div class="stat">❤️ <span id="lives-txt">20</span></div>
-            <div class="stat money">💰 <span id="money-txt">900</span></div>
-            <div class="stat animals" style="margin-right:0;">🐰 <span id="animals-txt">3</span></div>
-            <div style="display:flex; align-items:center;">
-                <button id="heal-btn" class="icon-btn" onclick="game.healAnimals()" title="花費 $500 治療所有小動物">✚</button>
-                <span class="heal-cost">($500)</span>
-            </div>
-
-            <div class="stat" style="margin-left: 10px;">🌊 <span id="wave-txt">1</span></div>
-            <div class="stat">👾 <span id="enemies-txt">0</span></div>
-            <div style="flex:1;"></div>
-            <button id="pause-btn" class="icon-btn" onclick="game.togglePause()" title="暫停遊戲">⏸️</button>
-            <button id="bgm-toggle" class="icon-btn" onclick="AudioSys.toggleBGM()" title="開關音樂">🎵</button>
-        </div>
-
-        <!-- 升級面板 -->
-        <div id="upgrade-panel">
-            <h2 style="margin:0 0 5px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
-            <div style="font-size:0.8em; color:#666; margin-bottom:10px;">
-                耐久度: <span id="up-hp">500</span> / <span id="up-max-hp">500</span>
-                <div class="hp-bar-bg"><div class="hp-bar-fill" id="up-hp-bar"></div></div>
-            </div>
-            <div class="up-info">
-                等級: <span id="up-level" class="up-val">1</span><br>
-                傷害: <span id="up-dmg" class="up-val">10</span><br>
-                射程: <span id="up-range" class="up-val">10</span><br>
-                攻速: <span id="up-speed" class="up-val">慢</span>
-            </div>
-            <button class="up-btn btn-upgrade" id="btn-upgrade" onclick="game.upgradeTower()">升級 ($50)</button>
-            <button class="up-btn btn-sell" id="btn-sell" onclick="game.sellTower()">賣出 ($30)</button>
-            <button class="up-btn btn-close" id="btn-close" onclick="game.closePanel()">關閉</button>
-        </div>
-
-        <div id="bottom-controls">
-            <!-- 防禦塔區 -->
-            <div class="control-group" id="tower-group">
-                <div class="tower-card" onclick="game.selectBuildType('ARCHER')" id="btn-archer">
-                    <div class="tower-icon" style="background: #fff9c4; color:#fbc02d;">🏹</div>
-                    <div class="tower-name">箭塔(短)</div>
-                    <div class="tower-cost">$40</div>
-                </div>
-                <div class="tower-card" onclick="game.selectBuildType('ICE')" id="btn-ice">
-                    <div class="tower-icon" style="background: #e1f5fe; color:#039be5;">❄️</div>
-                    <div class="tower-name">冰塔(短)</div>
-                    <div class="tower-cost">$70</div>
-                </div>
-                <div class="tower-card" onclick="game.selectBuildType('FIRE')" id="btn-fire">
-                    <div class="tower-icon" style="background: #ffebee; color:#e53935;">🔥</div>
-                    <div class="tower-name">火塔(極短)</div>
-                    <div class="tower-cost">$120</div>
-                </div>
-                <div class="tower-card" onclick="game.selectBuildType('LASER')" id="btn-laser">
-                    <div class="tower-icon" style="background: #f3e5f5; color:#8e24aa;">⚡</div>
-                    <div class="tower-name">雷射(全)</div>
-                    <div class="tower-cost">$540</div>
-                </div>
-            </div>
-
-            <!-- 農耕區 -->
-            <div class="control-group" style="background: rgba(220, 255, 220, 0.6);" id="farm-group">
-                <div class="tower-card farm" onclick="game.selectBuildType('FRUIT')" id="btn-fruit">
-                    <div class="tower-icon" style="background: #ffcdd2; color:#d50000;">🍎</div>
-                    <div class="tower-name">水果(快)</div>
-                    <div class="tower-cost">$50</div>
-                </div>
-                <div class="tower-card farm" onclick="game.selectBuildType('VEGGIE')" id="btn-veggie">
-                    <div class="tower-icon" style="background: #c8e6c9; color:#2e7d32;">🎃</div>
-                    <div class="tower-name">蔬菜(慢)</div>
-                    <div class="tower-cost">$80</div>
-                </div>
-            </div>
-
-            <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">👹 迎戰</button>
-        </div>
+    <!-- 升級面板 -->
+    <div id="upgrade-panel">
+      <h2 style="margin:0 0 5px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
+      <div style="font-size:0.8em; color:#666; margin-bottom:10px;">
+        耐久度: <span id="up-hp">500</span> / <span id="up-max-hp">500</span>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" id="up-hp-bar"></div></div>
+      </div>
+      <div class="up-info">
+        等級: <span id="up-level" class="up-val">1</span><br>
+        傷害: <span id="up-dmg" class="up-val">10</span><br>
+        射程: <span id="up-range" class="up-val">10</span><br>
+        攻速: <span id="up-speed" class="up-val">慢</span>
+      </div>
+      <button class="up-btn btn-upgrade" id="btn-upgrade" onclick="game.upgradeTower()">升級 ($50)</button>
+      <button class="up-btn btn-sell" id="btn-sell" onclick="game.sellTower()">賣出 ($30)</button>
+      <button class="up-btn btn-close" id="btn-close" onclick="game.closePanel()">關閉</button>
     </div>
 
-    <div id="game-over">
-        <h1 id="go-title">GAME OVER</h1>
-        <p style="font-size: 1.5em; color:#fff;" id="go-reason">最終波次: <span id="final-wave" style="color:#ffeb3b; font-weight:bold;">0</span></p>
-        <button class="action-btn" onclick="location.reload()">重新挑戰</button>
+    <div id="bottom-controls">
+      <!-- 防禦塔區 -->
+      <div class="control-group" id="tower-group">
+        <div class="tower-card" onclick="game.selectBuildType('ARCHER')" id="btn-archer">
+          <div class="tower-icon" style="background: #fff9c4; color:#fbc02d;">🏹</div>
+          <div class="tower-name">箭塔(短)</div>
+          <div class="tower-cost">$40</div>
+        </div>
+        <div class="tower-card" onclick="game.selectBuildType('ICE')" id="btn-ice">
+          <div class="tower-icon" style="background: #e1f5fe; color:#039be5;">❄️</div>
+          <div class="tower-name">冰塔(短)</div>
+          <div class="tower-cost">$70</div>
+        </div>
+        <div class="tower-card" onclick="game.selectBuildType('FIRE')" id="btn-fire">
+          <div class="tower-icon" style="background: #ffebee; color:#e53935;">🔥</div>
+          <div class="tower-name">火塔(極短)</div>
+          <div class="tower-cost">$120</div>
+        </div>
+        <div class="tower-card" onclick="game.selectBuildType('LASER')" id="btn-laser">
+          <div class="tower-icon" style="background: #f3e5f5; color:#8e24aa;">⚡</div>
+          <div class="tower-name">雷射(全)</div>
+          <div class="tower-cost">$540</div>
+        </div>
+      </div>
+
+      <!-- 農耕區 -->
+      <div class="control-group" style="background: rgba(220, 255, 220, 0.6);" id="farm-group">
+        <div class="tower-card farm" onclick="game.selectBuildType('FRUIT')" id="btn-fruit">
+          <div class="tower-icon" style="background: #ffcdd2; color:#d50000;">🍎</div>
+          <div class="tower-name">水果(快)</div>
+          <div class="tower-cost">$50</div>
+        </div>
+        <div class="tower-card farm" onclick="game.selectBuildType('VEGGIE')" id="btn-veggie">
+          <div class="tower-icon" style="background: #c8e6c9; color:#2e7d32;">🎃</div>
+          <div class="tower-name">蔬菜(慢)</div>
+          <div class="tower-cost">$80</div>
+        </div>
+      </div>
+
+      <button id="next-wave-btn" class="action-btn" onclick="game.nextWave()">👹 迎戰</button>
     </div>
-
-    <script>
-        const AudioSys = {
-            ctx: new (window.AudioContext || window.webkitAudioContext)(),
-            bgmInterval: null,
-            isBgmMuted: true,
-            bgmNoteIdx: 0,
-
-            play(type, freq, dur, vol=0.1, type2='sine') {
-                if(this.ctx.state === 'suspended') this.ctx.resume();
-                const osc = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
-                osc.type = type;
-                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-                if(type2 === 'slide') {
-                    osc.frequency.exponentialRampToValueAtTime(freq/2, this.ctx.currentTime + dur);
-                }
-                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
-                osc.connect(gain);
-                gain.connect(this.ctx.destination);
-                osc.start();
-                osc.stop(this.ctx.currentTime + dur);
-            },
-
-            shoot() { this.play('square', 800, 0.1, 0.05, 'slide'); },
-            laser() { this.play('sawtooth', 1200, 0.15, 0.05, 'slide'); },
-            build() { this.play('sine', 600, 0.1, 0.1); },
-            boom() { this.play('sawtooth', 100, 0.3, 0.15); },
-            error() { this.play('triangle', 150, 0.2, 0.1); },
-            animalDie() { this.play('sawtooth', 50, 0.8, 0.2); },
-            enemyShoot() { this.play('square', 400, 0.1, 0.05); },
-            towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); },
-            heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
-            harvest() { this.play('sine', 1000, 0.1, 0.1); setTimeout(()=>this.play('sine', 1500, 0.2, 0.1), 100); },
-            teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); },
-            squish() { this.play('square', 200, 0.1, 0.1, 'slide'); },
-            chop() { this.play('sawtooth', 100, 0.05, 0.1); },
-
-            toggleBGM() {
-                this.isBgmMuted = !this.isBgmMuted;
-                const btn = document.getElementById('bgm-toggle');
-                if (!this.isBgmMuted) {
-                    if (this.ctx.state === 'suspended') this.ctx.resume();
-                    this.startBGM();
-                    btn.classList.add('active');
-                } else {
-                    this.stopBGM();
-                    btn.classList.remove('active');
-                }
-            },
-
-            startBGM() {
-                if (this.bgmInterval) return;
-                const melody = [523,0,523,0,783,0,783,0,880,0,880,0,783,0,0,0,698,0,698,0,659,0,659,0,587,0,587,0,523,0,0,0];
-                const bass = [261,261,392,392,440,440,392,392,349,349,329,329,293,293,261,261];
-                const tempo = 160;
-
-                this.bgmInterval = setInterval(() => {
-                    if (this.isBgmMuted) return;
-                    const note = melody[this.bgmNoteIdx % melody.length];
-                    if (note > 0) this.play('triangle', note, 0.1, 0.05, 'sine');
-                    if (this.bgmNoteIdx % 4 === 0) {
-                        const bassNote = bass[Math.floor((this.bgmNoteIdx % (bass.length*4)) / 4)];
-                        this.play('sine', bassNote, 0.3, 0.08, 'sine');
-                    }
-                    this.bgmNoteIdx++;
-                }, tempo);
-            },
-
-            stopBGM() {
-                if (this.bgmInterval) {
-                    clearInterval(this.bgmInterval);
-                    this.bgmInterval = null;
-                }
-            }
-        };
-
-        const TILE_SIZE = 5;
-
-        const TOWER_DATA = {
-            ARCHER: { cost: 40, range: 3.5, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' },
-            ICE:    { cost: 70, range: 3, damage: 4,  rate: 45, color: 0x4fc3f7, name: "冰塔", type:'proj' },
-            FIRE:   { cost: 120, range: 2.5, damage: 15, rate: 70, color: 0xff7043, name: "火塔", type:'aoe' },
-            LASER:  { cost: 540, range: 16, damage: 2, rate: 0,   color: 0xe040fb, name: "雷射塔", type:'laser' }
-        };
-
-        const FARM_DATA = {
-            FRUIT: { cost: 50, growTime: 300, sell: 120, name: "水果樹", color: 0xff5252, type: 'farm' },
-            VEGGIE: { cost: 80, growTime: 900, sell: 300, name: "大南瓜", color: 0xff9800, type: 'farm' }
-        };
-
-        class Game3D {
-            constructor() {
-                this.lives = 20;
-                this.money = 900;
-                this.level = 1;
-                this.wave = 1;
-
-                this.gridW = 20;
-                this.gridH = 15;
-
-                this.enemies = [];
-                this.worms = [];
-                this.loggers = [];
-                this.towers = [];
-                this.plants = [];
-                this.projectiles = [];
-                this.particles = [];
-                this.animals = [];
-                this.decorations = [];
-                this.waveActive = false;
-                this.spawnQueue = [];
-                this.clock = new THREE.Clock();
-                this.isPaused = false;
-                this.bossesRemainingInWave = 0;
-
-                // ✅ 100 秒強制開戰
-                this.autoStartTimer = 0;
-                this.autoStartLimit = 100; // seconds
-
-                // ✅ 入口數量隨關卡增加（最多再多 4 個）
-                this.extraEntrancesMax = 4;
-
-                // ✅ 敵人速度倍率（關卡越高越快）
-                this.enemySpeedMult = 1;
-
-                // ✅ 相機拖曳平移
-                this.isDragging = false;
-                this.lastDragX = 0;
-                this.lastDragY = 0;
-                this.cameraTarget = new THREE.Vector3();
-
-                this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0x4fc3f7);
-                this.scene.fog = new THREE.Fog(0x4fc3f7, 60, 250);
-
-                const aspect = window.innerWidth / window.innerHeight;
-                this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 800);
-                this.updateCameraPos(true);
-
-                this.renderer = new THREE.WebGLRenderer({ antialias: true });
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                document.body.appendChild(this.renderer.domElement);
-
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                this.scene.add(ambientLight);
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-                dirLight.position.set(50, 100, 50);
-                dirLight.castShadow = true;
-                dirLight.shadow.mapSize.width = 2048;
-                dirLight.shadow.mapSize.height = 2048;
-                this.scene.add(dirLight);
-                const spotLight = new THREE.SpotLight(0xffeb3b, 0.4);
-                spotLight.position.set(0, 50, 0);
-                this.scene.add(spotLight);
-
-                this.grid = [];
-                this.createMap();
-                this.createDecorations();
-                this.initAnimals();
-
-                this.raycaster = new THREE.Raycaster();
-                this.mouse = new THREE.Vector2();
-                this.buildType = null;
-                this.selectedTower = null;
-
-                this.ghostMesh = new THREE.Group();
-                const gBox = new THREE.Mesh(
-                    new THREE.BoxGeometry(TILE_SIZE*0.8, TILE_SIZE, TILE_SIZE*0.8),
-                    new THREE.MeshBasicMaterial({ color: 0x76ff03, transparent: true, opacity: 0.5 })
-                );
-                this.ghostMesh.add(gBox);
-                this.ghostMesh.visible = false;
-                this.scene.add(this.ghostMesh);
-
-                this.rangeCircle = new THREE.Mesh(
-                    new THREE.RingGeometry(0.1, 0.2, 64),
-                    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
-                );
-                this.rangeCircle.rotation.x = -Math.PI / 2;
-                this.rangeCircle.visible = false;
-                this.scene.add(this.rangeCircle);
-
-                window.addEventListener('resize', () => this.onResize());
-
-                // ✅ 右鍵拖曳 / Shift+左鍵拖曳 平移地圖；滾輪縮放
-                window.addEventListener('contextmenu', (e) => e.preventDefault());
-                window.addEventListener('mousedown', (e) => this.onMouseDown(e));
-                window.addEventListener('mouseup', () => this.onMouseUp());
-                window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-                window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
-
-                // ✅ 點擊操作（抓蟲/蓋塔/採收/選塔）
-                window.addEventListener('click', (e) => this.onClick(e));
-
-                window.addEventListener('click', () => { if (AudioSys.isBgmMuted) AudioSys.toggleBGM(); }, { once: true });
-
-                this.updateUI();
-                this.animate();
-            }
-
-            // ======================
-            // 暫停鎖定：除了 togglePause，其他都擋掉
-            // ======================
-            canAct() {
-                // gameOver 時也不動
-                if (this.lives <= 0) return false;
-                return !this.isPaused && document.getElementById('level-up-overlay').style.display !== 'flex';
-            }
-
-            setPausedUI(isPaused) {
-                const overlay = document.getElementById('pause-overlay');
-                overlay.style.display = isPaused ? "flex" : "none";
-
-                const topBar = document.getElementById('top-bar');
-                const bottom = document.getElementById('bottom-controls');
-                const upgrade = document.getElementById('upgrade-panel');
-
-                // 暫停時，除暫停按鈕外都鎖起來
-                const lockEls = [
-                    document.getElementById('heal-btn'),
-                    document.getElementById('bgm-toggle'), // 你如果希望暫停也能開關音樂，把這行刪掉
-                    document.getElementById('next-wave-btn'),
-                    document.getElementById('tower-group'),
-                    document.getElementById('farm-group'),
-                    document.getElementById('btn-upgrade'),
-                    document.getElementById('btn-sell'),
-                    document.getElementById('btn-close'),
-                ];
-
-                lockEls.forEach(el => {
-                    if (!el) return;
-                    if (isPaused) {
-                        el.classList.add('paused-lock');
-                        el.classList.add('paused-dim');
-                        if (el.tagName === 'BUTTON') el.disabled = true;
-                    } else {
-                        el.classList.remove('paused-lock');
-                        el.classList.remove('paused-dim');
-                        if (el.tagName === 'BUTTON') el.disabled = false;
-                    }
-                });
-
-                // UI 外觀淡化
-                if (isPaused) {
-                    topBar.classList.add('paused-dim');
-                    bottom.classList.add('paused-dim');
-                    upgrade.classList.add('paused-dim');
-                } else {
-                    topBar.classList.remove('paused-dim');
-                    bottom.classList.remove('paused-dim');
-                    upgrade.classList.remove('paused-dim');
-                }
-            }
-
-            togglePause() {
-                this.isPaused = !this.isPaused;
-
-                const btn = document.getElementById('pause-btn');
-                if (this.isPaused) {
-                    // 暫停時：取消建造、關閉面板、藏幽靈
-                    this.selectBuildType(null);
-                    this.closePanel();
-                    this.ghostMesh.visible = false;
-                    this.rangeCircle.visible = false;
-
-                    btn.classList.add('paused');
-                    btn.innerText = "▶";
-                    this.setPausedUI(true);
-                } else {
-                    btn.classList.remove('paused');
-                    btn.innerText = "⏸️";
-                    this.setPausedUI(false);
-                }
-            }
-
-            updateCameraPos(resetTarget=false) {
-                const cx = this.gridW * TILE_SIZE / 2;
-                const cz = this.gridH * TILE_SIZE / 2;
-                const zoom = Math.max(this.gridW, this.gridH) * 3.5;
-
-                if (resetTarget || this.cameraTarget.lengthSq() === 0) {
-                    this.cameraTarget.set(cx, 0, cz);
-                }
-
-                this.camera.position.set(this.cameraTarget.x, zoom, this.cameraTarget.z + zoom * 0.5);
-                this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
-            }
-
-            clampCamera() {
-                const pad = TILE_SIZE * 2;
-                const maxX = this.gridW * TILE_SIZE + pad;
-                const maxZ = this.gridH * TILE_SIZE + pad;
-                const minX = -pad;
-                const minZ = -pad;
-                this.cameraTarget.x = Math.max(minX, Math.min(maxX, this.cameraTarget.x));
-                this.cameraTarget.z = Math.max(minZ, Math.min(maxZ, this.cameraTarget.z));
-            }
-
-            // ✅ 入口(路徑)增加：基礎 4 + 額外入口（關卡越高越多）
-            getPaths() {
-                const W = this.gridW;
-                const H = this.gridH;
-                const cX = Math.floor(W/2);
-                const end = { x: W-2, z: H-2 };
-
-                const base = [
-                    [{x:0, z:2}, {x:5, z:2}, {x:5, z:H-5}, {x:W-5, z:H-5}, {x:W-5, z:end.z}, end],
-                    [{x:8, z:0}, {x:8, z:5}, {x:W-5, z:5}, {x:W-5, z:end.z}, end],
-                    [{x:5, z:H-1}, {x:5, z:H-5}, {x:cX, z:H-5}, {x:cX, z:end.z}, end],
-                    [{x:W-1, z:4}, {x:W-4, z:4}, {x:W-4, z:H-5}, {x:W-2, z:H-5}, end]
-                ];
-
-                const extraCount = Math.min(this.extraEntrancesMax, Math.max(0, this.level - 1));
-                const extras = [];
-
-                // 生成額外入口：從不同邊緣出發，用 L 形接到終點區域
-                for (let i = 0; i < extraCount; i++) {
-                    const side = i % 4;
-                    const offset = 2 + i * 2;
-
-                    let start;
-                    if (side === 0) start = { x: 0, z: Math.min(H-3, 3 + offset) };                 // left
-                    if (side === 1) start = { x: Math.min(W-3, 3 + offset), z: 0 };                 // top
-                    if (side === 2) start = { x: W-1, z: Math.min(H-3, 2 + offset) };              // right
-                    if (side === 3) start = { x: Math.min(W-3, 2 + offset), z: H-1 };              // bottom
-
-                    const mid1 = { x: Math.min(W-5, Math.max(2, Math.floor(W*0.25) + i*2)), z: start.z };
-                    const mid2 = { x: mid1.x, z: Math.min(H-5, Math.max(2, end.z - (2 + i))) };
-                    const mid3 = { x: Math.min(W-5, end.x - 2), z: mid2.z };
-
-                    // 右邊/下邊的入口路徑稍微調整走向，避免太鬼畜
-                    if (side === 2) {
-                        mid1.x = Math.max(2, W-6 - i*2);
-                        mid2.x = mid1.x;
-                        mid3.x = mid1.x;
-                    }
-                    if (side === 3) {
-                        mid1.z = Math.max(2, H-6 - i*2);
-                        mid2.z = mid1.z;
-                        mid3.z = mid1.z;
-                    }
-
-                    extras.push([start, mid1, mid2, mid3, end]);
-                }
-
-                return base.concat(extras);
-            }
-
-            createMap() {
-                if(this.floorMesh) this.scene.remove(this.floorMesh);
-                if(this.grid.length > 0) {
-                    for(let x=0; x<this.grid.length; x++) {
-                        for(let z=0; z<this.grid[x].length; z++) {
-                            if(this.grid[x][z] && this.grid[x][z].mesh) this.scene.remove(this.grid[x][z].mesh);
-                        }
-                    }
-                }
-
-                const floorGeo = new THREE.PlaneGeometry(this.gridW * TILE_SIZE * 2, this.gridH * TILE_SIZE * 2);
-                const floorMat = new THREE.MeshLambertMaterial({ color: 0x8bc34a });
-                this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
-                this.floorMesh.rotation.x = -Math.PI / 2;
-                this.floorMesh.position.set(this.gridW*TILE_SIZE/2 - TILE_SIZE/2, -0.2, this.gridH*TILE_SIZE/2 - TILE_SIZE/2);
-                this.floorMesh.receiveShadow = true;
-                this.scene.add(this.floorMesh);
-
-                const matEmpty = new THREE.MeshLambertMaterial({ color: 0xc5e1a5 });
-                const matPath = new THREE.MeshLambertMaterial({ color: 0xffe0b2 });
-
-                const paths = this.getPaths();
-
-                this.grid = [];
-                for(let x=0; x<this.gridW; x++) {
-                    this.grid[x] = [];
-                    for(let z=0; z<this.gridH; z++) {
-                        let type = 0;
-                        for(let p of paths) {
-                            if (this.isPointOnPath(x, z, p)) type = 1;
-                        }
-
-                        const h = type === 1 ? 0.2 : 0.5;
-                        const geo = new THREE.BoxGeometry(TILE_SIZE * 0.95, h, TILE_SIZE * 0.95);
-                        const mat = type === 1 ? matPath : matEmpty;
-                        const tile = new THREE.Mesh(geo, mat);
-                        tile.position.set(x * TILE_SIZE, h/2, z * TILE_SIZE);
-                        tile.receiveShadow = true;
-                        tile.castShadow = true;
-                        this.scene.add(tile);
-                        this.grid[x][z] = { type: type, mesh: tile, tower: null, plant: null, x:x, z:z };
-                    }
-                }
-
-                const endP = paths[0][paths[0].length-1];
-                if(this.endBase) this.scene.remove(this.endBase);
-                this.endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
-                this.endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
-                this.endBase.castShadow = true;
-                this.scene.add(this.endBase);
-
-                if(this.startPoints) this.startPoints.forEach(s => this.scene.remove(s));
-                this.startPoints = [];
-                paths.forEach(p => {
-                    const start = p[0];
-                    const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x76ff03}));
-                    startM.position.set(start.x * TILE_SIZE, 0.5, start.z * TILE_SIZE);
-                    this.scene.add(startM);
-                    this.startPoints.push(startM);
-                });
-            }
-
-            createDecorations() {
-                this.decorations.forEach(d => this.scene.remove(d.mesh));
-                this.decorations = [];
-
-                const trunkMat = new THREE.MeshLambertMaterial({color: 0x795548});
-                const leavesMat = new THREE.MeshLambertMaterial({color: 0x43a047});
-                const flowerColors = [0xffeb3b, 0xe91e63, 0x9c27b0, 0xffffff];
-
-                for(let x=0; x<this.gridW; x++) {
-                    for(let z=0; z<this.gridH; z++) {
-                        if (this.grid[x][z].type === 0 && Math.random() > 0.7) {
-                            const posX = x * TILE_SIZE;
-                            const posZ = z * TILE_SIZE;
-                            const rand = Math.random();
-
-                            if (rand > 0.6) {
-                                const tree = new THREE.Group();
-                                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2), trunkMat);
-                                trunk.position.y = 1; trunk.castShadow = true;
-                                const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 8), leavesMat);
-                                leaves.position.y = 3.5; leaves.castShadow = true;
-                                tree.add(trunk, leaves);
-                                const s = 0.8 + Math.random() * 0.4;
-                                tree.scale.set(s, s, s);
-                                tree.rotation.y = Math.random() * Math.PI;
-                                tree.position.set(posX, 0.5, posZ);
-                                this.scene.add(tree);
-                                this.decorations.push({ mesh: tree, type: 'tree', x: x, z: z });
-                                this.grid[x][z].hasDecoration = true;
-                            } else {
-                                const flower = new THREE.Group();
-                                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1), leavesMat);
-                                stem.position.y = 0.5;
-                                const petalColor = flowerColors[Math.floor(Math.random()*flowerColors.length)];
-                                const petal = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4), new THREE.MeshBasicMaterial({color: petalColor}));
-                                petal.position.y = 1;
-                                flower.add(stem, petal);
-                                flower.position.set(posX + (Math.random()-0.5)*2, 0.5, posZ + (Math.random()-0.5)*2);
-                                this.scene.add(flower);
-                                this.decorations.push({ mesh: flower, type: 'flower' });
-                            }
-                        }
-                    }
-                }
-            }
-
-            initAnimals() {
-                this.animals.forEach(a => this.scene.remove(a.mesh));
-                this.animals = [];
-                const paths = this.getPaths();
-                const animalLocs = [paths[0][2], paths[1][2], paths[2][2]];
-                animalLocs.forEach(loc => {
-                    const animal = new Animal(loc.x, loc.z);
-                    this.scene.add(animal.mesh);
-                    this.animals.push(animal);
-                });
-                document.getElementById('animals-txt').innerText = this.animals.length;
-            }
-
-            healAnimals() {
-                if (!this.canAct()) return;
-                const cost = 500;
-                if (this.money >= cost && this.animals.length > 0) {
-                    let healed = false;
-                    this.animals.forEach(a => {
-                        if (a.hp < a.hpMax) {
-                            a.hp = Math.min(a.hpMax, a.hp + (a.hpMax * 0.5));
-                            a.updateBar();
-                            this.particles.push(new EffectParticle(a.mesh.position.x, 3, a.mesh.position.z, 0x00e676, 'burst'));
-                            healed = true;
-                        }
-                    });
-
-                    if (healed) {
-                        this.money -= cost;
-                        AudioSys.heal();
-                        this.updateUI();
-                    } else {
-                        AudioSys.error();
-                    }
-                } else {
-                    AudioSys.error();
-                }
-            }
-
-            isPointOnPath(x, z, path) {
-                for(let i=0; i<path.length-1; i++) {
-                    let p1 = path[i];
-                    let p2 = path[i+1];
-                    if(p1.z === p2.z && z === p1.z) {
-                        if(x >= Math.min(p1.x, p2.x) && x <= Math.max(p1.x, p2.x)) return true;
-                    }
-                    if(p1.x === p2.x && x === p1.x) {
-                        if(z >= Math.min(p1.z, p2.z) && z <= Math.max(p1.z, p2.z)) return true;
-                    }
-                }
-                return false;
-            }
-
-            getRandomFreeTile() {
-                const freeTiles = [];
-                for(let x=0; x<this.gridW; x++) {
-                    for(let z=0; z<this.gridH; z++) {
-                        const cell = this.grid[x][z];
-                        if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
-                            freeTiles.push({x, z});
-                        }
-                    }
-                }
-                if (freeTiles.length > 0) {
-                    const t = freeTiles[Math.floor(Math.random() * freeTiles.length)];
-                    return { x: t.x * TILE_SIZE, z: t.z * TILE_SIZE };
-                }
-                return { x: Math.random() * this.gridW * TILE_SIZE, z: Math.random() * this.gridH * TILE_SIZE };
-            }
-
-            spawnWorm() {
-                const startPos = this.getRandomFreeTile();
-                const worm = new Worm(startPos.x, startPos.z);
-                this.worms.push(worm);
-                this.scene.add(worm.mesh);
-            }
-
-            catchWorm(worm) {
-                if (!this.canAct()) return; // ✅ 暫停時不能抓蟲賺錢
-                this.scene.remove(worm.mesh);
-                const idx = this.worms.indexOf(worm);
-                if (idx > -1) this.worms.splice(idx, 1);
-
-                this.money += 20;
-                this.updateUI();
-                AudioSys.squish();
-                this.particles.push(new EffectParticle(worm.mesh.position.x, 1, worm.mesh.position.z, 0x76ff03, 'burst', 0.5));
-
-                const text = document.createElement('div');
-                text.className = 'float-text';
-                text.style.color = '#76ff03';
-                text.innerText = `抓到了! +$20`;
-                const vec = worm.mesh.position.clone();
-                vec.y += 2;
-                vec.project(this.camera);
-                const x = (vec.x * .5 + .5) * window.innerWidth;
-                const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                text.style.left = `${x}px`;
-                text.style.top = `${y}px`;
-                document.body.appendChild(text);
-                setTimeout(() => text.remove(), 1000);
-            }
-
-            spawnLogger() {
-                const startPos = this.getRandomFreeTile();
-                const logger = new Lumberjack(startPos.x, startPos.z);
-                this.loggers.push(logger);
-                this.scene.add(logger.mesh);
-            }
-
-            // ✅ 關卡切換：地圖 +20% / 清塔 / 入口增加 / 敵人更快
-            startNextLevel() {
-                if (this.isPaused) return;
-
-                document.getElementById('level-up-overlay').style.display = 'none';
-
-                // 地圖擴張 +20%
-                this.gridW = Math.floor(this.gridW * 1.20);
-                this.gridH = Math.floor(this.gridH * 1.20);
-
-                this.level++;
-                this.wave = 1;
-
-                // 敵人速度加快
-                this.enemySpeedMult = 1 + 0.10 * (this.level - 1);
-
-                // ✅ 清空玩家塔
-                this.towers.forEach(t => this.scene.remove(t.mesh));
-                this.towers = [];
-                // grid tower 記錄會在 createMap() 重建後自然清掉
-
-                // 清場（保留金錢）
-                this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
-                this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
-                this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
-                this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
-                this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
-
-                this.spawnQueue = [];
-                this.waveActive = false;
-                document.getElementById('next-wave-btn').disabled = false;
-
-                // 重建
-                this.createMap();
-                this.createDecorations();
-                this.initAnimals();
-                this.updateCameraPos(true);
-
-                // ✅ 重置 100 秒強制迎戰計時
-                this.autoStartTimer = 0;
-
-                document.getElementById('level-txt').innerText = this.level;
-                this.updateUI();
-            }
-
-            nextWave() {
-                if (!this.canAct()) return;
-                if(this.waveActive) return;
-                this.waveActive = true;
-                document.getElementById('next-wave-btn').disabled = true;
-
-                // 開戰後就把自動倒數歸零（避免下一次瞬間又觸發）
-                this.autoStartTimer = 0;
-
-                const activePaths = this.getPaths();
-                const groups = 8 + Math.floor(this.wave * 2);
-                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
-                let spawnDelayBase = Math.max(8, 35 - (this.wave * 2) - Math.floor(this.level * 1.5)); // ✅ 關卡越高出怪更密
-
-                for(let i=0; i<groups; i++) {
-                    const baseDelay = i * spawnDelayBase;
-                    for (let j = 0; j < 6; j++) {
-                        let type = 'NORMAL';
-                        const rand = Math.random();
-                        if (this.wave >= 1 && rand > 0.5) type = 'FAST';
-                        if (this.wave >= 2 && rand > 0.7) type = 'SHOOTER';
-                        if (this.wave >= 3 && rand > 0.8) type = 'TANK';
-                        if (this.wave >= 4 && Math.random() > 0.85) type = 'FLYING';
-
-                        let path = activePaths[j % activePaths.length];
-                        if (type === 'FLYING') path = activePaths[Math.floor(Math.random() * activePaths.length)];
-                        this.spawnQueue.push({ type, hpMult, path, delay: baseDelay + (j * 3) });
-                    }
-                    if (this.wave >= 2 && Math.random() > 0.85) {
-                        for(let b=0; b<4; b++) {
-                             this.spawnQueue.push({ type: 'BOMBER', hpMult, path: activePaths[b % activePaths.length], delay: baseDelay + 15 + (b * 2) });
-                        }
-                    }
-                }
-
-                this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4);
-                this.spawnBossSequence(groups * spawnDelayBase);
-            }
-
-            spawnBossSequence(baseDelay = 0) {
-                if (this.bossesRemainingInWave <= 0) return;
-                this.bossesRemainingInWave--;
-
-                const activePaths = this.getPaths();
-                const bossPath = activePaths[Math.floor(Math.random() * activePaths.length)];
-                const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
-
-                this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
-
-                const isAmbush = this.enemies.length < 5;
-                const guards = ['BOMBER', 'BOMBER', 'SHOOTER', 'SHOOTER'];
-                guards.forEach((gType, idx) => {
-                    let opts = { type: gType, hpMult, delay: baseDelay + 5 + (idx * 3) };
-                    if (isAmbush) opts.spawnLoc = this.getRandomFreeTile();
-                    else opts.path = bossPath;
-                    this.spawnQueue.push(opts);
-                });
-            }
-
-            spawnEnemy() {
-                if(this.spawnQueue.length === 0) return;
-                const next = this.spawnQueue[0];
-                if(next.delay > 0) { next.delay--; return; }
-                this.spawnQueue.shift();
-                const enemy = new Enemy(next);
-                this.enemies.push(enemy);
-                this.scene.add(enemy.mesh);
-
-                if (enemy.isStationary) {
-                    AudioSys.teleport();
-                    this.particles.push(new EffectParticle(enemy.mesh.position.x, 2, enemy.mesh.position.z, 0x9c27b0, 'burst', 2));
-                }
-            }
-
-            update() {
-                const dt = this.clock.getDelta();
-
-                // ✅ 暫停：只渲染，不更新
-                if (this.isPaused) {
-                    this.renderer.render(this.scene, this.camera);
-                    return;
-                }
-                if (this.lives <= 0) return;
-
-                // ✅ 100 秒強制迎戰（僅在未開戰狀態累積）
-                if (!this.waveActive && document.getElementById('level-up-overlay').style.display !== 'flex') {
-                    this.autoStartTimer += dt;
-                    if (this.autoStartTimer >= this.autoStartLimit) {
-                        this.nextWave();
-                    }
-                }
-
-                if (this.waveActive) {
-                    this.spawnEnemy();
-
-                    if (this.spawnQueue.length === 0 && this.enemies.length === 0 && this.bossesRemainingInWave === 0) {
-                        if (this.wave % 5 === 0) {
-                            document.getElementById('level-up-overlay').style.display = 'flex';
-                            document.getElementById('levelup-info').innerText = `地圖擴張 +20% | 入口增加 | 敵人更快 | 塔全清空`;
-                            this.waveActive = false;
-                        } else {
-                            this.endWave();
-                        }
-                    }
-                }
-
-                if (Math.random() < 0.005 + (this.plants.length * 0.002)) {
-                    if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
-                }
-
-                if (Math.random() < 0.003 && this.loggers.length < 3) {
-                    this.spawnLogger();
-                }
-
-                this.animals.forEach(a => a.update());
-                for (let i = this.worms.length - 1; i >= 0; i--) this.worms[i].update(this.plants);
-                for (let i = this.loggers.length - 1; i >= 0; i--) this.loggers[i].update(this.decorations);
-                for (let i = this.plants.length - 1; i >= 0; i--) this.plants[i].update();
-
-                for (let i = this.enemies.length - 1; i >= 0; i--) {
-                    const e = this.enemies[i];
-                    const status = e.update(this.animals, this.towers);
-                    if (status === 'REACHED') {
-                        this.lives--;
-                        AudioSys.error();
-                        this.removeEnemy(e);
-                        this.camera.position.x += (Math.random()-0.5);
-                        setTimeout(()=>this.camera.position.x = this.cameraTarget.x, 50);
-                        if(this.lives <= 0) this.gameOver("基地被摧毀");
-                    }
-                }
-
-                this.towers.forEach(t => t.update(this.enemies));
-
-                for (let i = this.projectiles.length - 1; i >= 0; i--) {
-                    const p = this.projectiles[i];
-                    if (!p.active) {
-                        this.scene.remove(p.mesh);
-                        this.projectiles.splice(i, 1);
-                    } else {
-                        p.update();
-                    }
-                }
-
-                for (let i = this.particles.length - 1; i >= 0; i--) {
-                    if(!this.particles[i].update()) {
-                        this.scene.remove(this.particles[i].mesh);
-                        this.particles.splice(i, 1);
-                    }
-                }
-
-                this.updateUI();
-            }
-
-            endWave() {
-                this.waveActive = false;
-                this.wave++;
-                this.money += 200 + (this.wave * 30);
-                document.getElementById('next-wave-btn').disabled = false;
-                AudioSys.build();
-
-                // ✅ 每波結束重新開始 100 秒倒數（不按迎戰就自動來）
-                this.autoStartTimer = 0;
-            }
-
-            removeEnemy(e) {
-                if (e.type === 'BOSS' && this.bossesRemainingInWave > 0) {
-                    this.spawnBossSequence(100);
-                }
-                this.scene.remove(e.mesh);
-                e.dispose();
-                const idx = this.enemies.indexOf(e);
-                if (idx > -1) this.enemies.splice(idx, 1);
-            }
-
-            removeAnimal(a) {
-                this.scene.remove(a.mesh);
-                const idx = this.animals.indexOf(a);
-                if (idx > -1) this.animals.splice(idx, 1);
-                document.getElementById('animals-txt').innerText = this.animals.length;
-                AudioSys.animalDie();
-                this.gameOver("小動物被殺死了！我們沒能保護它...");
-            }
-
-            removeTower(t) {
-                this.scene.remove(t.mesh);
-                if (this.grid[t.gx] && this.grid[t.gx][t.gz]) this.grid[t.gx][t.gz].tower = null;
-                const idx = this.towers.indexOf(t);
-                if (idx > -1) this.towers.splice(idx, 1);
-                game.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xff0000, 'explode', 2));
-                AudioSys.towerDestroy();
-                const msg = document.getElementById('tower-destroyed-msg');
-                msg.style.opacity = 1;
-                setTimeout(() => msg.style.opacity = 0, 1500);
-                if(this.selectedTower === t) this.closePanel();
-            }
-
-            selectBuildType(type) {
-                if (this.isPaused) return; // ✅ 暫停時不能切建造
-                document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('active'));
-                if (type === null || this.buildType === type) {
-                    this.buildType = null;
-                    this.ghostMesh.visible = false;
-                    this.rangeCircle.visible = false;
-                    return;
-                }
-                this.buildType = type;
-                document.getElementById(type === 'FRUIT' ? 'btn-fruit' : type === 'VEGGIE' ? 'btn-veggie' : `btn-${type.toLowerCase()}`).classList.add('active');
-                this.closePanel();
-                const isFarm = FARM_DATA[type] !== undefined;
-                if (!isFarm) {
-                    this.rangeCircle.visible = true;
-                    const data = TOWER_DATA[type];
-                    this.rangeCircle.geometry = new THREE.RingGeometry(data.range * TILE_SIZE - 0.5, data.range * TILE_SIZE, 64);
-                } else {
-                    this.rangeCircle.visible = false;
-                }
-            }
-
-            getGridPos(event) {
-                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-                const target = new THREE.Vector3();
-                this.raycaster.ray.intersectPlane(plane, target);
-                if (target) {
-                    const gx = Math.round(target.x / TILE_SIZE);
-                    const gz = Math.round(target.z / TILE_SIZE);
-                    return { x: gx, z: gz, worldX: gx * TILE_SIZE, worldZ: gz * TILE_SIZE };
-                }
-                return null;
-            }
-
-            onMouseDown(e) {
-                if (this.isPaused) return;
-
-                // 右鍵拖曳 或 Shift+左鍵拖曳：平移地圖
-                if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
-                    this.isDragging = true;
-                    this.lastDragX = e.clientX;
-                    this.lastDragY = e.clientY;
-                    return;
-                }
-            }
-
-            onMouseUp() {
-                this.isDragging = false;
-            }
-
-            onWheel(e) {
-                if (this.isPaused) return;
-                e.preventDefault();
-                // zoom：調整相機高度
-                const delta = Math.sign(e.deltaY);
-                this.camera.position.y = Math.max(20, Math.min(400, this.camera.position.y + delta * 10));
-                this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
-            }
-
-            onMouseMove(e) {
-                if (this.isPaused) return;
-
-                // 拖曳平移相機
-                if (this.isDragging) {
-                    const dx = e.clientX - this.lastDragX;
-                    const dy = e.clientY - this.lastDragY;
-                    this.lastDragX = e.clientX;
-                    this.lastDragY = e.clientY;
-
-                    const panSpeed = 0.12 * (this.camera.position.y / 80);
-
-                    // 把螢幕拖曳轉換成世界座標（XZ 平面）
-                    this.cameraTarget.x -= dx * panSpeed;
-                    this.cameraTarget.z += dy * panSpeed;
-
-                    this.clampCamera();
-                    // 只平移，保留高度
-                    const y = this.camera.position.y;
-                    const backOffset = (this.camera.position.z - this.cameraTarget.z);
-                    this.camera.position.set(this.cameraTarget.x, y, this.cameraTarget.z + backOffset);
-                    this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
-                    return;
-                }
-
-                // 建造幽靈/射程圈（只有在可操作狀態）
-                const pos = this.getGridPos(e);
-                if (pos && pos.x >= 0 && pos.x < this.gridW && pos.z >= 0 && pos.z < this.gridH) {
-                    if (this.buildType) {
-                        this.ghostMesh.position.set(pos.worldX, 1, pos.worldZ);
-                        this.ghostMesh.visible = true;
-                        const cell = this.grid[pos.x][pos.z];
-                        const canBuild = cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration;
-                        this.ghostMesh.children[0].material.color.setHex(canBuild ? 0x76ff03 : 0xff1744);
-                        if (TOWER_DATA[this.buildType]) {
-                            this.rangeCircle.position.set(pos.worldX, 1, pos.worldZ);
-                        }
-                    }
-                } else {
-                    this.ghostMesh.visible = false;
-                }
-            }
-
-            onClick(e) {
-                // ✅ 暫停時：所有點擊都無效（除了 UI 自己的 onclick 會照跑，例如 pause 按鈕）
-                if (!this.canAct()) return;
-
-                if (e.target.closest('button') || e.target.closest('.tower-card')) return;
-
-                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-
-                const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
-                if (wormIntersects.length > 0) {
-                    const clickedMesh = wormIntersects[0].object.parent;
-                    const worm = this.worms.find(w => w.mesh === clickedMesh || w.mesh.children.includes(clickedMesh));
-                    if (worm) { this.catchWorm(worm); return; }
-                }
-
-                const pos = this.getGridPos(e);
-                if (!pos || pos.x < 0 || pos.x >= this.gridW || pos.z < 0 || pos.z >= this.gridH) return;
-                const cell = this.grid[pos.x][pos.z];
-
-                if (this.buildType) {
-                    if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
-                        if (FARM_DATA[this.buildType]) {
-                            if (this.money >= FARM_DATA[this.buildType].cost) this.buildPlant(pos.x, pos.z, this.buildType);
-                            else AudioSys.error();
-                        } else {
-                            if (this.money >= TOWER_DATA[this.buildType].cost) this.buildTower(pos.x, pos.z, this.buildType);
-                            else AudioSys.error();
-                        }
-                    }
-                } else {
-                    if (cell.plant) cell.plant.tryHarvest();
-                    else if (cell.tower) this.selectTower(cell.tower);
-                    else this.closePanel();
-                }
-            }
-
-            buildTower(gx, gz, type) {
-                if (!this.canAct()) return;
-                this.money -= TOWER_DATA[type].cost;
-                const t = new Tower(gx, gz, type);
-                this.scene.add(t.mesh);
-                this.towers.push(t);
-                this.grid[gx][gz].tower = t;
-                AudioSys.build();
-                this.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xffffff, 'burst'));
-                this.selectBuildType(null);
-                this.updateUI();
-            }
-
-            buildPlant(gx, gz, type) {
-                if (!this.canAct()) return;
-                this.money -= FARM_DATA[type].cost;
-                const p = new Plant(gx, gz, type);
-                this.scene.add(p.mesh);
-                this.plants.push(p);
-                this.grid[gx][gz].plant = p;
-                AudioSys.build();
-                this.particles.push(new EffectParticle(p.mesh.position.x, 1, p.mesh.position.z, 0x8d6e63, 'burst'));
-                this.selectBuildType(null);
-                this.updateUI();
-            }
-
-            selectTower(tower) {
-                if (!this.canAct()) return;
-                this.selectedTower = tower;
-                this.rangeCircle.visible = true;
-                this.rangeCircle.position.set(tower.mesh.position.x, 1, tower.mesh.position.z);
-                const r = tower.getRange() * TILE_SIZE;
-                this.rangeCircle.geometry = new THREE.RingGeometry(r-0.5, r, 64);
-                const p = document.getElementById('upgrade-panel');
-                p.style.display = 'block';
-                document.getElementById('up-name').innerText = TOWER_DATA[tower.type].name;
-                this.updatePanelInfo();
-            }
-
-            updatePanelInfo() {
-                if (!this.selectedTower) return;
-                const t = this.selectedTower;
-                const cost = Math.floor(TOWER_DATA[t.type].cost * 1.5 * t.level);
-                document.getElementById('up-level').innerText = t.level;
-                document.getElementById('up-dmg').innerText = (t.getDamage()).toFixed(1);
-                document.getElementById('up-range').innerText = t.getRange();
-                document.getElementById('btn-upgrade').innerText = `升級 ($${cost})`;
-                document.getElementById('btn-upgrade').disabled = this.money < cost || this.isPaused;
-                document.getElementById('up-hp').innerText = Math.floor(t.hp);
-                document.getElementById('up-max-hp').innerText = t.maxHp;
-                document.getElementById('up-hp-bar').style.width = (t.hp / t.maxHp * 100) + '%';
-            }
-
-            upgradeTower() {
-                if (!this.canAct()) return;
-                if(!this.selectedTower) return;
-                const t = this.selectedTower;
-                const cost = Math.floor(TOWER_DATA[t.type].cost * 1.5 * t.level);
-                if (this.money >= cost) {
-                    this.money -= cost;
-                    t.upgrade();
-                    AudioSys.build();
-                    this.particles.push(new EffectParticle(t.mesh.position.x, 4, t.mesh.position.z, 0xffff00, 'burst'));
-                    this.updatePanelInfo();
-                    this.updateUI();
-                }
-            }
-
-            sellTower() {
-                if (!this.canAct()) return;
-                if(!this.selectedTower) return;
-                const t = this.selectedTower;
-                const val = Math.floor(TOWER_DATA[t.type].cost * 0.4 * t.level);
-                this.money += val;
-                this.scene.remove(t.mesh);
-                this.grid[t.gx][t.gz].tower = null;
-                this.towers = this.towers.filter(x => x !== t);
-                AudioSys.build();
-                this.closePanel();
-                this.updateUI();
-            }
-
-            closePanel() {
-                this.selectedTower = null;
-                document.getElementById('upgrade-panel').style.display = 'none';
-                if (!this.buildType) this.rangeCircle.visible = false;
-            }
-
-            updateUI() {
-                document.getElementById('lives-txt').innerText = this.lives;
-                document.getElementById('money-txt').innerText = this.money;
-                document.getElementById('wave-txt').innerText = this.wave;
-                document.getElementById('enemies-txt').innerText = this.spawnQueue.length + this.enemies.length;
-                if(this.selectedTower) this.updatePanelInfo();
-            }
-
-            gameOver(reason) {
-                document.getElementById('game-over').style.display = 'flex';
-                document.getElementById('go-title').innerText = "GAME OVER";
-                document.getElementById('go-reason').innerHTML = `${reason}<br>最終波次: <span style="color:#ffeb3b">${this.wave}</span>`;
-                this.renderer.setAnimationLoop(null);
-                AudioSys.stopBGM();
-            }
-
-            onResize() {
-                const aspect = window.innerWidth / window.innerHeight;
-                this.camera.aspect = aspect;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-
-            animate() {
-                this.renderer.setAnimationLoop(() => {
-                    this.update();
-                    this.renderer.render(this.scene, this.camera);
-                });
-            }
+  </div>
+
+  <div id="game-over">
+    <h1 id="go-title">GAME OVER</h1>
+    <p style="font-size: 1.5em; color:#fff;" id="go-reason">最終波次: <span id="final-wave" style="color:#ffeb3b; font-weight:bold;">0</span></p>
+    <button class="action-btn" onclick="location.reload()">重新挑戰</button>
+  </div>
+
+  <script>
+    const AudioSys = {
+      ctx: new (window.AudioContext || window.webkitAudioContext)(),
+      bgmInterval: null,
+      isBgmMuted: true,
+      bgmNoteIdx: 0,
+
+      play(type, freq, dur, vol=0.1, type2='sine') {
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if(type2 === 'slide') osc.frequency.exponentialRampToValueAtTime(freq/2, this.ctx.currentTime + dur);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(); osc.stop(this.ctx.currentTime + dur);
+      },
+
+      shoot() { this.play('square', 800, 0.1, 0.05, 'slide'); },
+      laser() { this.play('sawtooth', 1200, 0.15, 0.05, 'slide'); },
+      build() { this.play('sine', 600, 0.1, 0.1); },
+      boom() { this.play('sawtooth', 100, 0.3, 0.15); },
+      error() { this.play('triangle', 150, 0.2, 0.1); },
+      animalDie() { this.play('sawtooth', 50, 0.8, 0.2); },
+      enemyShoot() { this.play('square', 400, 0.1, 0.05); },
+      towerDestroy() { this.play('sawtooth', 80, 0.5, 0.3); },
+      heal() { this.play('sine', 400, 0.1, 0.1); setTimeout(()=>this.play('sine', 600, 0.2, 0.1), 100); },
+      harvest() { this.play('sine', 1000, 0.1, 0.1); setTimeout(()=>this.play('sine', 1500, 0.2, 0.1), 100); },
+      teleport() { this.play('sawtooth', 800, 0.3, 0.1, 'slide'); },
+      squish() { this.play('square', 200, 0.1, 0.1, 'slide'); },
+      chop() { this.play('sawtooth', 100, 0.05, 0.1); },
+
+      toggleBGM() {
+        this.isBgmMuted = !this.isBgmMuted;
+        const btn = document.getElementById('bgm-toggle');
+        if (!this.isBgmMuted) {
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          this.startBGM();
+          btn.classList.add('active');
+        } else {
+          this.stopBGM();
+          btn.classList.remove('active');
+        }
+      },
+
+      startBGM() {
+        if (this.bgmInterval) return;
+        const melody = [523,0,523,0,783,0,783,0,880,0,880,0,783,0,0,0,698,0,698,0,659,0,659,0,587,0,587,0,523,0,0,0];
+        const bass = [261,261,392,392,440,440,392,392,349,349,329,329,293,293,261,261];
+        const tempo = 160;
+
+        this.bgmInterval = setInterval(() => {
+          if (this.isBgmMuted) return;
+          const note = melody[this.bgmNoteIdx % melody.length];
+          if (note > 0) this.play('triangle', note, 0.1, 0.05, 'sine');
+          if (this.bgmNoteIdx % 4 === 0) {
+            const bassNote = bass[Math.floor((this.bgmNoteIdx % (bass.length*4)) / 4)];
+            this.play('sine', bassNote, 0.3, 0.08, 'sine');
+          }
+          this.bgmNoteIdx++;
+        }, tempo);
+      },
+
+      stopBGM() {
+        if (this.bgmInterval) { clearInterval(this.bgmInterval); this.bgmInterval = null; }
+      }
+    };
+
+    const TILE_SIZE = 5;
+
+    const TOWER_DATA = {
+      ARCHER: { cost: 40, range: 3.5, damage: 8, rate: 40, color: 0xfdd835, name: "箭塔", type:'proj' },
+      ICE:    { cost: 70, range: 3, damage: 4,  rate: 45, color: 0x4fc3f7, name: "冰塔", type:'proj' },
+      FIRE:   { cost: 120, range: 2.5, damage: 15, rate: 70, color: 0xff7043, name: "火塔", type:'aoe' },
+      LASER:  { cost: 540, range: 16, damage: 2, rate: 0,   color: 0xe040fb, name: "雷射塔", type:'laser' }
+    };
+
+    const FARM_DATA = {
+      FRUIT: { cost: 50, growTime: 300, sell: 120, name: "水果樹", color: 0xff5252, type: 'farm' },
+      VEGGIE: { cost: 80, growTime: 900, sell: 300, name: "大南瓜", color: 0xff9800, type: 'farm' }
+    };
+
+    class Game3D {
+      constructor() {
+        this.lives = 20;
+        this.money = 900;
+        this.level = 1;
+        this.wave = 1;
+
+        this.gridW = 20;
+        this.gridH = 15;
+
+        this.enemies = [];
+        this.worms = [];
+        this.loggers = [];
+        this.towers = [];
+        this.plants = [];
+        this.projectiles = [];
+        this.particles = [];
+        this.animals = [];
+        this.decorations = [];
+        this.waveActive = false;
+        this.spawnQueue = [];
+
+        this.clock = new THREE.Clock();
+        this.isPaused = false;
+        this.bossesRemainingInWave = 0;
+
+        // ✅ 100 秒強制開戰（顯示倒數）
+        this.autoStartTimer = 0;
+        this.autoStartLimit = 100; // seconds
+
+        // ✅ 入口數量隨關卡增加（最多再多 4 個）
+        this.extraEntrancesMax = 4;
+
+        // ✅ 敵人速度倍率（關卡越高越快）
+        this.enemySpeedMult = 1;
+
+        // ✅ 相機拖曳平移
+        this.isDragging = false;
+        this.lastDragX = 0;
+        this.lastDragY = 0;
+        this.cameraTarget = new THREE.Vector3();
+
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x4fc3f7);
+        this.scene.fog = new THREE.Fog(0x4fc3f7, 60, 250);
+
+        const aspect = window.innerWidth / window.innerHeight;
+        this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 800);
+        this.updateCameraPos(true);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(this.renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        this.scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        this.scene.add(dirLight);
+        const spotLight = new THREE.SpotLight(0xffeb3b, 0.4);
+        spotLight.position.set(0, 50, 0);
+        this.scene.add(spotLight);
+
+        this.grid = [];
+        this.createMap();
+        this.createDecorations();
+        this.initAnimals();
+
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.buildType = null;
+        this.selectedTower = null;
+
+        this.ghostMesh = new THREE.Group();
+        const gBox = new THREE.Mesh(
+          new THREE.BoxGeometry(TILE_SIZE*0.8, TILE_SIZE, TILE_SIZE*0.8),
+          new THREE.MeshBasicMaterial({ color: 0x76ff03, transparent: true, opacity: 0.5 })
+        );
+        this.ghostMesh.add(gBox);
+        this.ghostMesh.visible = false;
+        this.scene.add(this.ghostMesh);
+
+        this.rangeCircle = new THREE.Mesh(
+          new THREE.RingGeometry(0.1, 0.2, 64),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+        );
+        this.rangeCircle.rotation.x = -Math.PI / 2;
+        this.rangeCircle.visible = false;
+        this.scene.add(this.rangeCircle);
+
+        window.addEventListener('resize', () => this.onResize());
+
+        // ✅ 右鍵拖曳 / Shift+左鍵拖曳 平移地圖；滾輪縮放
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+        window.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        window.addEventListener('mouseup', () => this.onMouseUp());
+        window.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+
+        // ✅ 點擊操作（抓蟲/蓋塔/採收/選塔）
+        window.addEventListener('click', (e) => this.onClick(e));
+
+        window.addEventListener('click', () => { if (AudioSys.isBgmMuted) AudioSys.toggleBGM(); }, { once: true });
+
+        this.updateUI();
+        this.updateAutoStartHUD(); // ✅ 初始化倒數顯示
+        this.animate();
+      }
+
+      // ✅ 倒數 HUD 更新（顯示剩餘秒數）
+      updateAutoStartHUD() {
+        const hud = document.getElementById('auto-start-hud');
+        const txt = document.getElementById('auto-start-txt');
+        if (!hud || !txt) return;
+
+        // 只有「未開戰」且「未進結算」才顯示倒數
+        const levelUpShown = document.getElementById('level-up-overlay').style.display === 'flex';
+        if (this.waveActive || levelUpShown || this.lives <= 0) {
+          hud.style.display = 'none';
+          return;
         }
 
-        // ==========================================
-        // 伐木工
-        // ==========================================
-        class Lumberjack {
-            constructor(x, z) {
-                this.mesh = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5), new THREE.MeshLambertMaterial({color: 0xd32f2f}));
-                body.position.y = 0.75;
-                const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshLambertMaterial({color: 0xffccbc}));
-                head.position.y = 1.8;
-                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.8), new THREE.MeshLambertMaterial({color: 0x5d4037}));
-                hat.position.y = 2.4;
+        const remain = Math.max(0, Math.ceil(this.autoStartLimit - this.autoStartTimer));
+        txt.innerText = remain;
+        hud.style.display = 'block';
+      }
 
-                const axeHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshLambertMaterial({color: 0x8d6e63}));
-                axeHandle.rotation.x = Math.PI/2; axeHandle.position.set(0.5, 1, 0.5);
-                const axeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.4), new THREE.MeshLambertMaterial({color: 0x90a4ae}));
-                axeBlade.position.set(0.5, 1, 1);
+      // ======================
+      // 暫停鎖定：除了 togglePause，其他都擋掉
+      // ======================
+      canAct() {
+        if (this.lives <= 0) return false;
+        return !this.isPaused && document.getElementById('level-up-overlay').style.display !== 'flex';
+      }
 
-                this.mesh.add(body, head, hat, axeHandle, axeBlade);
-                this.mesh.position.set(x, 0, z);
-                this.mesh.castShadow = true;
-                this.axe = axeHandle;
+      setPausedUI(isPaused) {
+        const overlay = document.getElementById('pause-overlay');
+        overlay.style.display = isPaused ? "flex" : "none";
 
-                this.targetTree = null;
-                this.state = 'MOVING';
-                this.timer = 0;
-                this.chopDuration = (60 + Math.random() * 30) * 60;
-                this.speed = 0.05;
+        const topBar = document.getElementById('top-bar');
+        const bottom = document.getElementById('bottom-controls');
+        const upgrade = document.getElementById('upgrade-panel');
 
-                const barGroup = new THREE.Group();
-                const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.3), new THREE.MeshBasicMaterial({color: 0x333333}));
-                const fg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.2), new THREE.MeshBasicMaterial({color: 0xffab00}));
-                fg.position.z = 0.01;
-                barGroup.add(bg, fg);
-                barGroup.position.y = 3.5;
-                barGroup.visible = false;
-                this.progressBar = fg;
-                this.barGroup = barGroup;
-                this.mesh.add(barGroup);
-            }
+        // 暫停時，除暫停按鈕外都鎖起來
+        const lockEls = [
+          document.getElementById('heal-btn'),
+          document.getElementById('bgm-toggle'), // 若你希望暫停也能開關音樂，把這行刪掉
+          document.getElementById('next-wave-btn'),
+          document.getElementById('tower-group'),
+          document.getElementById('farm-group'),
+          document.getElementById('btn-upgrade'),
+          document.getElementById('btn-sell'),
+          document.getElementById('btn-close'),
+        ];
 
-            update(decorations) {
-                if (game.isPaused) return; // ✅ 暫停鎖住伐木工
+        lockEls.forEach(el => {
+          if (!el) return;
+          if (isPaused) {
+            el.classList.add('paused-lock');
+            el.classList.add('paused-dim');
+            if (el.tagName === 'BUTTON') el.disabled = true;
+          } else {
+            el.classList.remove('paused-lock');
+            el.classList.remove('paused-dim');
+            if (el.tagName === 'BUTTON') el.disabled = false;
+          }
+        });
 
-                this.barGroup.lookAt(game.camera.position);
+        // UI 外觀淡化
+        if (isPaused) {
+          topBar.classList.add('paused-dim');
+          bottom.classList.add('paused-dim');
+          upgrade.classList.add('paused-dim');
+        } else {
+          topBar.classList.remove('paused-dim');
+          bottom.classList.remove('paused-dim');
+          upgrade.classList.remove('paused-dim');
+        }
+      }
 
-                if (!this.targetTree) {
-                    let minDist = Infinity;
-                    let nearest = null;
-                    for (let d of decorations) {
-                        if (d.type === 'tree') {
-                            const dist = this.mesh.position.distanceTo(d.mesh.position);
-                            if (dist < minDist) { minDist = dist; nearest = d; }
-                        }
-                    }
-                    this.targetTree = nearest;
-                    if(!nearest) {
-                        game.scene.remove(this.mesh);
-                        game.loggers = game.loggers.filter(l => l !== this);
-                        return;
-                    }
-                }
+      // ✅ 修正：暫停後可以正常繼續（重置 clock delta，避免解除暫停瞬移/倒數跳秒）
+      togglePause() {
+        this.isPaused = !this.isPaused;
 
-                if (this.state === 'MOVING') {
-                    const targetPos = this.targetTree.mesh.position;
-                    const dist = this.mesh.position.distanceTo(targetPos);
-                    if (dist > 1.5) {
-                        this.mesh.lookAt(targetPos);
-                        this.mesh.translateZ(this.speed);
-                        this.mesh.position.y = Math.sin(Date.now() * 0.01) * 0.1;
-                    } else {
-                        this.state = 'CHOPPING';
-                        this.barGroup.visible = true;
-                    }
-                } else if (this.state === 'CHOPPING') {
-                    this.timer++;
-                    this.axe.rotation.x = Math.PI/2 + Math.sin(Date.now() * 0.01) * 0.5;
-                    const progress = this.timer / this.chopDuration;
-                    this.progressBar.scale.x = progress;
-                    if (this.timer >= this.chopDuration) this.finishJob();
-                }
-            }
+        const btn = document.getElementById('pause-btn');
+        if (this.isPaused) {
+          this.selectBuildType(null);
+          this.closePanel();
+          this.ghostMesh.visible = false;
+          this.rangeCircle.visible = false;
 
-            finishJob() {
-                game.scene.remove(this.targetTree.mesh);
-                game.grid[this.targetTree.x][this.targetTree.z].hasDecoration = false;
-                game.decorations = game.decorations.filter(d => d !== this.targetTree);
+          btn.classList.add('paused');
+          btn.innerText = "▶";
+          this.setPausedUI(true);
+        } else {
+          btn.classList.remove('paused');
+          btn.innerText = "⏸️";
+          this.setPausedUI(false);
 
-                game.money += 800;
-                game.updateUI();
-                AudioSys.harvest();
-                AudioSys.chop();
+          // ✅ 解除暫停時把 clock delta 歸零，避免 dt 爆大
+          this.clock.getDelta();
+        }
+      }
 
-                const text = document.createElement('div');
-                text.className = 'float-text wood';
-                text.innerText = `+$800 (木材)`;
-                const vec = this.mesh.position.clone();
-                vec.y += 3;
-                vec.project(game.camera);
-                const x = (vec.x * .5 + .5) * window.innerWidth;
-                const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                text.style.left = `${x}px`;
-                text.style.top = `${y}px`;
-                document.body.appendChild(text);
-                setTimeout(() => text.remove(), 1000);
+      updateCameraPos(resetTarget=false) {
+        const cx = this.gridW * TILE_SIZE / 2;
+        const cz = this.gridH * TILE_SIZE / 2;
+        const zoom = Math.max(this.gridW, this.gridH) * 3.5;
 
-                game.scene.remove(this.mesh);
-                game.loggers = game.loggers.filter(l => l !== this);
-                game.particles.push(new EffectParticle(this.mesh.position.x, 1, this.mesh.position.z, 0x795548, 'burst', 2));
-            }
+        if (resetTarget || this.cameraTarget.lengthSq() === 0) {
+          this.cameraTarget.set(cx, 0, cz);
         }
 
-        // ==========================================
-        // 菜蟲、植物、動物、敵人、塔、防禦彈…（原本結構保留，僅加上暫停/速度倍率）
-        // ==========================================
-        class Worm {
-            constructor(x, z) {
-                this.mesh = new THREE.Group();
-                const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03}));
-                const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x64dd17})); seg2.position.z = -0.4;
-                const seg3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03})); seg3.position.z = -0.8;
-                const head = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshLambertMaterial({color: 0xccff90})); head.position.z = 0.4; head.position.y = 0.1;
-                const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeL.position.set(-0.15, 0.2, 0.7);
-                const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeR.position.set(0.15, 0.2, 0.7);
-                this.mesh.add(seg1, seg2, seg3, head, eyeL, eyeR);
-                this.mesh.position.set(x, 0.3, z);
-                this.mesh.castShadow = true;
-                this.targetPlant = null; this.speed = 0.03; this.eatingTimer = 0;
-            }
-            update(plants) {
-                if (game.isPaused) return; // ✅ 暫停鎖住菜蟲行為
-                if (!this.targetPlant || !plants.includes(this.targetPlant)) {
-                    let minDist = Infinity; let nearest = null;
-                    for (let p of plants) { const d = this.mesh.position.distanceTo(p.mesh.position); if (d < minDist) { minDist = d; nearest = p; } }
-                    this.targetPlant = nearest;
-                }
-                if (this.targetPlant) {
-                    const targetPos = this.targetPlant.mesh.position;
-                    const dist = this.mesh.position.distanceTo(targetPos);
-                    if (dist > 1.0) {
-                        this.mesh.lookAt(targetPos); this.mesh.translateZ(this.speed); this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.01) * 0.1;
-                    } else {
-                        if (this.targetPlant.growth >= this.targetPlant.maxGrowth) {
-                            this.eatingTimer++; this.mesh.children.forEach(c => c.material.color.setHex(0xff0000));
-                            if (this.eatingTimer > 60) this.eatPlant();
-                        } else { this.mesh.children[0].material.color.setHex(0x76ff03); this.eatingTimer = 0; }
-                    }
-                }
-            }
-            eatPlant() {
-                if (this.targetPlant) {
-                    game.scene.remove(this.targetPlant.mesh);
-                    game.grid[this.targetPlant.gx][this.targetPlant.gz].plant = null;
-                    game.plants = game.plants.filter(p => p !== this.targetPlant);
-                    game.particles.push(new EffectParticle(this.targetPlant.mesh.position.x, 1, this.targetPlant.mesh.position.z, 0x8bc34a, 'burst', 1.0));
-                    const text = document.createElement('div'); text.className = 'float-text bad'; text.innerText = "被吃掉了!";
-                    const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
-                    const x = (vec.x * .5 + .5) * window.innerWidth; const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                    text.style.left = `${x}px`; text.style.top = `${y}px`; document.body.appendChild(text); setTimeout(() => text.remove(), 1000);
-                    game.scene.remove(this.mesh); game.worms = game.worms.filter(w => w !== this);
-                }
-            }
+        this.camera.position.set(this.cameraTarget.x, zoom, this.cameraTarget.z + zoom * 0.5);
+        this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
+      }
+
+      clampCamera() {
+        const pad = TILE_SIZE * 2;
+        const maxX = this.gridW * TILE_SIZE + pad;
+        const maxZ = this.gridH * TILE_SIZE + pad;
+        const minX = -pad;
+        const minZ = -pad;
+        this.cameraTarget.x = Math.max(minX, Math.min(maxX, this.cameraTarget.x));
+        this.cameraTarget.z = Math.max(minZ, Math.min(maxZ, this.cameraTarget.z));
+      }
+
+      getPaths() {
+        const W = this.gridW;
+        const H = this.gridH;
+        const cX = Math.floor(W/2);
+        const end = { x: W-2, z: H-2 };
+
+        const base = [
+          [{x:0, z:2}, {x:5, z:2}, {x:5, z:H-5}, {x:W-5, z:H-5}, {x:W-5, z:end.z}, end],
+          [{x:8, z:0}, {x:8, z:5}, {x:W-5, z:5}, {x:W-5, z:end.z}, end],
+          [{x:5, z:H-1}, {x:5, z:H-5}, {x:cX, z:H-5}, {x:cX, z:end.z}, end],
+          [{x:W-1, z:4}, {x:W-4, z:4}, {x:W-4, z:H-5}, {x:W-2, z:H-5}, end]
+        ];
+
+        const extraCount = Math.min(this.extraEntrancesMax, Math.max(0, this.level - 1));
+        const extras = [];
+
+        for (let i = 0; i < extraCount; i++) {
+          const side = i % 4;
+          const offset = 2 + i * 2;
+
+          let start;
+          if (side === 0) start = { x: 0, z: Math.min(H-3, 3 + offset) };
+          if (side === 1) start = { x: Math.min(W-3, 3 + offset), z: 0 };
+          if (side === 2) start = { x: W-1, z: Math.min(H-3, 2 + offset) };
+          if (side === 3) start = { x: Math.min(W-3, 2 + offset), z: H-1 };
+
+          const mid1 = { x: Math.min(W-5, Math.max(2, Math.floor(W*0.25) + i*2)), z: start.z };
+          const mid2 = { x: mid1.x, z: Math.min(H-5, Math.max(2, end.z - (2 + i))) };
+          const mid3 = { x: Math.min(W-5, end.x - 2), z: mid2.z };
+
+          if (side === 2) {
+            mid1.x = Math.max(2, W-6 - i*2);
+            mid2.x = mid1.x;
+            mid3.x = mid1.x;
+          }
+          if (side === 3) {
+            mid1.z = Math.max(2, H-6 - i*2);
+            mid2.z = mid1.z;
+            mid3.z = mid1.z;
+          }
+
+          extras.push([start, mid1, mid2, mid3, end]);
         }
 
-        class Plant {
-            constructor(gx, gz, type) {
-                this.gx = gx; this.gz = gz; this.type = type; this.data = FARM_DATA[type]; this.growth = 0; this.maxGrowth = this.data.growTime;
-                this.mesh = new THREE.Group(); this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
-                const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 8), new THREE.MeshLambertMaterial({color: 0x8bc34a})); sprout.position.y = 0.5; this.mesh.add(sprout); this.visual = sprout;
-                if (type === 'FRUIT') {
-                    this.matureMesh = new THREE.Group(); const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.5), new THREE.MeshLambertMaterial({color: 0x795548})); trunk.position.y = 0.75;
-                    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5), new THREE.MeshLambertMaterial({color: 0x4caf50})); leaves.position.y = 2.5;
-                    const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f1.position.set(0.8, 2.5, 0.5);
-                    const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f2.position.set(-0.7, 3.0, -0.4);
-                    const f3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f3.position.set(0.2, 2.2, -0.9);
-                    this.matureMesh.add(trunk, leaves, f1, f2, f3);
-                } else {
-                    this.matureMesh = new THREE.Group(); const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 8), new THREE.MeshLambertMaterial({color: 0xff9800})); pumpkin.scale.y = 0.7; pumpkin.position.y = 1;
-                    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5), new THREE.MeshLambertMaterial({color: 0x388e3c})); stem.position.y = 1.8; this.matureMesh.add(pumpkin, stem);
-                }
-                this.matureMesh.visible = false; this.matureMesh.scale.set(0.1, 0.1, 0.1); this.mesh.add(this.matureMesh);
+        return base.concat(extras);
+      }
+
+      createMap() {
+        if(this.floorMesh) this.scene.remove(this.floorMesh);
+        if(this.grid.length > 0) {
+          for(let x=0; x<this.grid.length; x++) {
+            for(let z=0; z<this.grid[x].length; z++) {
+              if(this.grid[x][z] && this.grid[x][z].mesh) this.scene.remove(this.grid[x][z].mesh);
             }
-            update() {
-                if (game.isPaused) return; // ✅ 暫停鎖住生長動畫
-                if (this.growth < this.maxGrowth) {
-                    this.growth++; const progress = this.growth / this.maxGrowth;
-                    if (progress < 0.5) { this.visual.scale.setScalar(1 + progress * 2); } else if (!this.matureMesh.visible) { this.visual.visible = false; this.matureMesh.visible = true; }
-                    if (this.matureMesh.visible && progress < 1) { const s = 0.1 + (progress - 0.5) * 2 * 0.9; this.matureMesh.scale.set(s, s, s); }
-                } else {
-                    const s = 1 + Math.sin(Date.now() * 0.005) * 0.1; this.matureMesh.scale.set(s, s, s);
-                    this.matureMesh.children.forEach(c => { if(c.material.emissive) c.material.emissive.setHex(0x333333); });
-                }
-            }
-            tryHarvest() {
-                if (!game.canAct()) return; // ✅ 暫停時不能採收
-                if (this.growth >= this.maxGrowth) {
-                    game.money += this.data.sell; AudioSys.harvest();
-                    const text = document.createElement('div'); text.className = 'float-text'; text.innerText = `+$${this.data.sell}`;
-                    const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
-                    const x = (vec.x * .5 + .5) * window.innerWidth; const y = (-(vec.y * .5) + .5) * window.innerHeight;
-                    text.style.left = `${x}px`; text.style.top = `${y}px`; document.body.appendChild(text); setTimeout(() => text.remove(), 1000);
-                    game.scene.remove(this.mesh); game.grid[this.gx][this.gz].plant = null; game.plants = game.plants.filter(p => p !== this);
-                    game.particles.push(new EffectParticle(this.mesh.position.x, 2, this.mesh.position.z, 0xffd700, 'burst', 1.5));
-                    game.updateUI();
-                } else { AudioSys.error(); }
-            }
+          }
         }
 
-        class Animal {
-            constructor(gx, gz) {
-                this.hpMax = 200;
-                this.hp = this.hpMax;
+        const floorGeo = new THREE.PlaneGeometry(this.gridW * TILE_SIZE * 2, this.gridH * TILE_SIZE * 2);
+        const floorMat = new THREE.MeshLambertMaterial({ color: 0x8bc34a });
+        this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        this.floorMesh.rotation.x = -Math.PI / 2;
+        this.floorMesh.position.set(this.gridW*TILE_SIZE/2 - TILE_SIZE/2, -0.2, this.gridH*TILE_SIZE/2 - TILE_SIZE/2);
+        this.floorMesh.receiveShadow = true;
+        this.scene.add(this.floorMesh);
 
-                this.mesh = new THREE.Group();
-                this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+        const matEmpty = new THREE.MeshLambertMaterial({ color: 0xc5e1a5 });
+        const matPath = new THREE.MeshLambertMaterial({ color: 0xffe0b2 });
 
-                const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), new THREE.MeshLambertMaterial({color: 0xffccbc}));
-                body.position.y = 0.75; body.castShadow = true;
+        const paths = this.getPaths();
 
-                const earGeo = new THREE.BoxGeometry(0.5, 1, 0.5);
-                const earL = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earL.position.set(-0.6, 1.8, 0);
-                const earR = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earR.position.set(0.6, 1.8, 0);
+        this.grid = [];
+        for(let x=0; x<this.gridW; x++) {
+          this.grid[x] = [];
+          for(let z=0; z<this.gridH; z++) {
+            let type = 0;
+            for(let p of paths) if (this.isPointOnPath(x, z, p)) type = 1;
 
-                const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.2), new THREE.MeshLambertMaterial({color: 0xff5722})); nose.position.set(0, 1, 1);
-
-                this.bodyGroup = new THREE.Group();
-                this.bodyGroup.add(body, earL, earR, nose);
-                this.mesh.add(this.bodyGroup);
-
-                const barContainer = new THREE.Group();
-                const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000}));
-                const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x29b6f6}));
-                fg.position.z = 0.01;
-                barContainer.add(bg, fg);
-                barContainer.position.y = 3.5;
-                this.hpBar = fg;
-                this.barContainer = barContainer;
-                this.mesh.add(barContainer);
-
-                this.homePos = this.mesh.position.clone();
-                this.targetPos = this.homePos.clone();
-                this.state = 'IDLE';
-                this.idleTimer = Math.random() * 60 + 30;
-                this.moveSpeed = 0.04;
-            }
-
-            update() {
-                if (game.isPaused) return; // ✅ 暫停時動物也不亂跑（看起來更像「真的暫停」）
-                this.barContainer.lookAt(game.camera.position);
-
-                if (this.state === 'IDLE') {
-                    const time = Date.now() * 0.005;
-                    this.bodyGroup.position.y = Math.sin(time) * 0.05;
-                    this.bodyGroup.rotation.z = Math.sin(time * 0.5) * 0.02;
-
-                    this.idleTimer--;
-                    if (this.idleTimer <= 0) this.pickNewTarget();
-                } else if (this.state === 'MOVING') {
-                    const currentPos = this.mesh.position;
-                    const dist = currentPos.distanceTo(this.targetPos);
-
-                    if (dist < 0.1) {
-                        this.state = 'IDLE';
-                        this.idleTimer = Math.random() * 100 + 50;
-                    } else {
-                        const dir = new THREE.Vector3().subVectors(this.targetPos, currentPos).normalize();
-                        this.mesh.position.add(dir.multiplyScalar(this.moveSpeed));
-
-                        this.bodyGroup.lookAt(this.targetPos.x, this.bodyGroup.position.y + this.mesh.position.y, this.targetPos.z);
-
-                        const time = Date.now() * 0.015;
-                        this.bodyGroup.position.y = Math.abs(Math.sin(time)) * 0.5;
-                    }
-                }
-            }
-
-            pickNewTarget() {
-                const range = TILE_SIZE * 2;
-                const dx = (Math.random() - 0.5) * 2 * range;
-                const dz = (Math.random() - 0.5) * 2 * range;
-                this.targetPos.set(this.homePos.x + dx, 0, this.homePos.z + dz);
-
-                this.targetPos.x = Math.max(0, Math.min(this.targetPos.x, game.gridW * TILE_SIZE));
-                this.targetPos.z = Math.max(0, Math.min(this.targetPos.z, game.gridH * TILE_SIZE));
-
-                this.state = 'MOVING';
-            }
-
-            updateBar() { const pct = Math.max(0, this.hp / this.hpMax); this.hpBar.scale.x = pct; }
-            takeDamage(amt) { this.hp -= amt; this.updateBar(); if (this.hp <= 0) game.removeAnimal(this); }
+            const h = type === 1 ? 0.2 : 0.5;
+            const geo = new THREE.BoxGeometry(TILE_SIZE * 0.95, h, TILE_SIZE * 0.95);
+            const mat = type === 1 ? matPath : matEmpty;
+            const tile = new THREE.Mesh(geo, mat);
+            tile.position.set(x * TILE_SIZE, h/2, z * TILE_SIZE);
+            tile.receiveShadow = true;
+            tile.castShadow = true;
+            this.scene.add(tile);
+            this.grid[x][z] = { type: type, mesh: tile, tower: null, plant: null, x:x, z:z };
+          }
         }
 
-        class Enemy {
-            constructor(opts) {
-                this.type = opts.type; this.path = opts.path || []; this.pathIdx = 0; const hpMult = opts.hpMult || 1;
-                this.hpMax = 50 * hpMult; this.speed = 0.08; this.color = 0xffffff; this.reward = 15;
-                this.isSlowed = 0; this.flyHeight = 0; this.attackCooldown = 0; this.damage = 4;
-                this.defense = Math.floor(game.wave * 0.8) + 1; this.attackRange = 3;
-                this.isStationary = false; if (opts.spawnLoc) { this.isStationary = true; this.spawnPos = opts.spawnLoc; }
-                let geo;
-                if (this.type === 'NORMAL') { geo = new THREE.DodecahedronGeometry(1.5); this.color = 0x5c6bc0; this.speed = 0.08; }
-                else if (this.type === 'FAST') { geo = new THREE.ConeGeometry(1, 2.5, 8); this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult; this.attackRange = 2; this.damage = 3; }
-                else if (this.type === 'TANK') { geo = new THREE.BoxGeometry(2.5, 2.5, 2.5); this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 10; this.defense += 3; this.attackRange = 5; }
-                else if (this.type === 'SHOOTER') { geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8); this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; this.damage = 8; this.attackRange = 18; }
-                else if (this.type === 'BOMBER') { geo = new THREE.IcosahedronGeometry(1.8, 1); this.color = 0x212121; this.speed = 0.05; this.hpMax = 80 * hpMult; this.attackRange = 6; this.defense += 5; this.reward = 50; }
-                else if (this.type === 'FLYING') { geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6); this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8;
-                    this.reward = 25;
-                    const startP = {x: 0, z: Math.random() * game.gridH};
-                    this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE);
-                    const endP = {x: game.gridW-2, z: game.gridH-2};
-                    this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE);
-                }
-                else if (this.type === 'BOSS') { geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8); this.color = 0xffd700; this.speed = 0.03; this.hpMax = 50 * hpMult * 30; this.reward = 500; this.defense += 10; this.damage = 50; this.attackRange = 4; }
+        const endP = paths[0][paths[0].length-1];
+        if(this.endBase) this.scene.remove(this.endBase);
+        this.endBase = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 4, 8), new THREE.MeshPhongMaterial({color: 0xd32f2f}));
+        this.endBase.position.set(endP.x * TILE_SIZE, 2, endP.z * TILE_SIZE);
+        this.endBase.castShadow = true;
+        this.scene.add(this.endBase);
 
-                // ✅ 敵人速度加快（關卡越高越快）
-                this.speed *= game.enemySpeedMult;
+        if(this.startPoints) this.startPoints.forEach(s => this.scene.remove(s));
+        this.startPoints = [];
+        paths.forEach(p => {
+          const start = p[0];
+          const startM = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshLambertMaterial({color: 0x76ff03}));
+          startM.position.set(start.x * TILE_SIZE, 0.5, start.z * TILE_SIZE);
+          this.scene.add(startM);
+          this.startPoints.push(startM);
+        });
+      }
 
-                this.hp = this.hpMax;
-                this.mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: this.color })); this.mesh.castShadow = true;
-                if (this.isStationary) { this.mesh.position.set(this.spawnPos.x + TILE_SIZE/2, 1.5, this.spawnPos.z + TILE_SIZE/2); }
-                else if (this.type === 'FLYING') { this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); }
-                else { const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); }
-                if (this.type === 'BOSS') { this.mesh.scale.set(1.5, 1.5, 1.5); this.mesh.position.y = 3; }
-                const barContainer = new THREE.Group();
-                const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000}));
-                const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x76ff03}));
-                fg.position.z = 0.01;
-                barContainer.add(bg, fg);
-                barContainer.position.y = this.type === 'BOSS' ? 5 : 3;
-                this.hpBar = fg;
-                this.mesh.add(barContainer);
-                this.onBeforeRender = () => { barContainer.lookAt(game.camera.position); };
+      createDecorations() {
+        this.decorations.forEach(d => this.scene.remove(d.mesh));
+        this.decorations = [];
+
+        const trunkMat = new THREE.MeshLambertMaterial({color: 0x795548});
+        const leavesMat = new THREE.MeshLambertMaterial({color: 0x43a047});
+        const flowerColors = [0xffeb3b, 0xe91e63, 0x9c27b0, 0xffffff];
+
+        for(let x=0; x<this.gridW; x++) {
+          for(let z=0; z<this.gridH; z++) {
+            if (this.grid[x][z].type === 0 && Math.random() > 0.7) {
+              const posX = x * TILE_SIZE;
+              const posZ = z * TILE_SIZE;
+              const rand = Math.random();
+
+              if (rand > 0.6) {
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2), trunkMat);
+                trunk.position.y = 1; trunk.castShadow = true;
+                const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 8), leavesMat);
+                leaves.position.y = 3.5; leaves.castShadow = true;
+                tree.add(trunk, leaves);
+                const s = 0.8 + Math.random() * 0.4;
+                tree.scale.set(s, s, s);
+                tree.rotation.y = Math.random() * Math.PI;
+                tree.position.set(posX, 0.5, posZ);
+                this.scene.add(tree);
+                this.decorations.push({ mesh: tree, type: 'tree', x: x, z: z });
+                this.grid[x][z].hasDecoration = true;
+              } else {
+                const flower = new THREE.Group();
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1), leavesMat);
+                stem.position.y = 0.5;
+                const petalColor = flowerColors[Math.floor(Math.random()*flowerColors.length)];
+                const petal = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4), new THREE.MeshBasicMaterial({color: petalColor}));
+                petal.position.y = 1;
+                flower.add(stem, petal);
+                flower.position.set(posX + (Math.random()-0.5)*2, 0.5, posZ + (Math.random()-0.5)*2);
+                this.scene.add(flower);
+                this.decorations.push({ mesh: flower, type: 'flower' });
+              }
             }
-            update(animals, towers) {
-                if (game.isPaused) return 'PAUSED';
+          }
+        }
+      }
 
-                let currentSpeed = this.speed;
-                if (this.isSlowed > 0) { currentSpeed *= 0.6; this.isSlowed--; this.mesh.material.emissive.setHex(0x00ffff); } else { this.mesh.material.emissive.setHex(0x000000); }
+      initAnimals() {
+        this.animals.forEach(a => this.scene.remove(a.mesh));
+        this.animals = [];
+        const paths = this.getPaths();
+        const animalLocs = [paths[0][2], paths[1][2], paths[2][2]];
+        animalLocs.forEach(loc => {
+          const animal = new Animal(loc.x, loc.z);
+          this.scene.add(animal.mesh);
+          this.animals.push(animal);
+        });
+        document.getElementById('animals-txt').innerText = this.animals.length;
+      }
 
-                if ((this.type === 'BOMBER' || this.type === 'BOSS') && towers.length > 0) {
-                    for(let tower of towers) {
-                        const dist = this.mesh.position.distanceTo(tower.mesh.position);
-                        if (dist < this.attackRange * TILE_SIZE) {
-                            if (this.attackCooldown <= 0) {
-                                this.attackCooldown = 150; AudioSys.enemyShoot();
-                                const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color:0x000000}));
-                                bomb.position.copy(this.mesh.position); bomb.position.y += 2; game.scene.add(bomb);
-                                const targetPos = tower.mesh.position.clone(); let t = 0;
-                                const animateBomb = setInterval(() => {
-                                    t += 0.1; bomb.position.lerp(targetPos, 0.1); bomb.position.y += Math.sin(t * Math.PI) * 0.5;
-                                    if (bomb.position.distanceTo(targetPos) < 1) { clearInterval(animateBomb); game.scene.remove(bomb); tower.takeDamage(999); }
-                                }, 50);
-                            } else { this.attackCooldown--; }
-                            return 'ATTACKING_TOWER';
-                        }
-                    }
-                }
-
-                if (this.type !== 'FLYING' && animals.length > 0) {
-                    for(let animal of animals) {
-                        const dist = this.mesh.position.distanceTo(animal.mesh.position);
-                        if (dist < this.attackRange * TILE_SIZE * 0.8) {
-                            if (this.attackCooldown <= 0) {
-                                animal.takeDamage(this.damage); this.attackCooldown = 40; AudioSys.enemyShoot();
-                                const laserGeo = new THREE.BufferGeometry().setFromPoints([
-                                    this.mesh.position.clone().add(new THREE.Vector3(0,1,0)),
-                                    animal.mesh.position.clone().add(new THREE.Vector3(0,1,0))
-                                ]);
-                                const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({color: 0xff0000, linewidth: 2}));
-                                game.scene.add(laser); setTimeout(() => game.scene.remove(laser), 100);
-                                this.mesh.position.y += 0.5; setTimeout(() => this.mesh.position.y -= 0.5, 100);
-                            } else { this.attackCooldown--; }
-                            return 'ATTACKING';
-                        }
-                    }
-                }
-
-                if (this.isStationary) { this.mesh.children[0].lookAt(game.camera.position); return 'STATIONARY'; }
-
-                if (this.type === 'FLYING') {
-                    const dir = new THREE.Vector3().subVectors(this.customTarget, this.mesh.position).normalize();
-                    this.mesh.position.add(dir.multiplyScalar(currentSpeed * TILE_SIZE));
-                    if (this.mesh.position.distanceTo(this.customTarget) < 1) return 'REACHED';
-                } else {
-                    const targetNode = this.path[this.pathIdx + 1]; if (!targetNode) return 'REACHED';
-                    const tx = targetNode.x * TILE_SIZE; const tz = targetNode.z * TILE_SIZE;
-                    const dx = tx - this.mesh.position.x; const dz = tz - this.mesh.position.z;
-                    const dist = Math.sqrt(dx*dx + dz*dz); const moveDist = currentSpeed * TILE_SIZE;
-                    if (dist < moveDist) {
-                        this.mesh.position.x = tx; this.mesh.position.z = tz; this.pathIdx++;
-                        if(this.path[this.pathIdx+1]) { this.mesh.lookAt(this.path[this.pathIdx+1].x * TILE_SIZE, 1.5, this.path[this.pathIdx+1].z * TILE_SIZE); }
-                    } else {
-                        this.mesh.position.x += (dx/dist) * moveDist;
-                        this.mesh.position.z += (dz/dist) * moveDist;
-                    }
-                }
-                this.mesh.children[0].lookAt(game.camera.position);
-                return 'MOVING';
+      healAnimals() {
+        if (!this.canAct()) return;
+        const cost = 500;
+        if (this.money >= cost && this.animals.length > 0) {
+          let healed = false;
+          this.animals.forEach(a => {
+            if (a.hp < a.hpMax) {
+              a.hp = Math.min(a.hpMax, a.hp + (a.hpMax * 0.5));
+              a.updateBar();
+              this.particles.push(new EffectParticle(a.mesh.position.x, 3, a.mesh.position.z, 0x00e676, 'burst'));
+              healed = true;
             }
-            takeDamage(amt) {
-                const actualDamage = Math.max(1, amt - this.defense);
-                this.hp -= actualDamage;
-                const pct = Math.max(0, this.hp / this.hpMax);
-                this.hpBar.scale.x = pct;
-                this.hpBar.material.color.setHex(pct > 0.5 ? 0x76ff03 : 0xff1744);
-                const pColor = actualDamage < amt ? 0xaaaaaa : this.color;
-                game.particles.push(new EffectParticle(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, pColor, 'hit', 0.5));
-                if (this.hp <= 0) {
-                    game.money += this.reward;
-                    game.removeEnemy(this);
-                    game.particles.push(new EffectParticle(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, this.color, 'explode'));
-                    AudioSys.boom();
-                }
+          });
+
+          if (healed) {
+            this.money -= cost;
+            AudioSys.heal();
+            this.updateUI();
+          } else {
+            AudioSys.error();
+          }
+        } else {
+          AudioSys.error();
+        }
+      }
+
+      isPointOnPath(x, z, path) {
+        for(let i=0; i<path.length-1; i++) {
+          let p1 = path[i];
+          let p2 = path[i+1];
+          if(p1.z === p2.z && z === p1.z) {
+            if(x >= Math.min(p1.x, p2.x) && x <= Math.max(p1.x, p2.x)) return true;
+          }
+          if(p1.x === p2.x && x === p1.x) {
+            if(z >= Math.min(p1.z, p2.z) && z <= Math.max(p1.z, p2.z)) return true;
+          }
+        }
+        return false;
+      }
+
+      getRandomFreeTile() {
+        const freeTiles = [];
+        for(let x=0; x<this.gridW; x++) {
+          for(let z=0; z<this.gridH; z++) {
+            const cell = this.grid[x][z];
+            if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) freeTiles.push({x, z});
+          }
+        }
+        if (freeTiles.length > 0) {
+          const t = freeTiles[Math.floor(Math.random() * freeTiles.length)];
+          return { x: t.x * TILE_SIZE, z: t.z * TILE_SIZE };
+        }
+        return { x: Math.random() * this.gridW * TILE_SIZE, z: Math.random() * this.gridH * TILE_SIZE };
+      }
+
+      spawnWorm() {
+        const startPos = this.getRandomFreeTile();
+        const worm = new Worm(startPos.x, startPos.z);
+        this.worms.push(worm);
+        this.scene.add(worm.mesh);
+      }
+
+      catchWorm(worm) {
+        if (!this.canAct()) return;
+        this.scene.remove(worm.mesh);
+        const idx = this.worms.indexOf(worm);
+        if (idx > -1) this.worms.splice(idx, 1);
+
+        this.money += 20;
+        this.updateUI();
+        AudioSys.squish();
+        this.particles.push(new EffectParticle(worm.mesh.position.x, 1, worm.mesh.position.z, 0x76ff03, 'burst', 0.5));
+
+        const text = document.createElement('div');
+        text.className = 'float-text';
+        text.style.color = '#76ff03';
+        text.innerText = `抓到了! +$20`;
+        const vec = worm.mesh.position.clone();
+        vec.y += 2;
+        vec.project(this.camera);
+        const x = (vec.x * .5 + .5) * window.innerWidth;
+        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+        text.style.left = `${x}px`;
+        text.style.top = `${y}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 1000);
+      }
+
+      spawnLogger() {
+        const startPos = this.getRandomFreeTile();
+        const logger = new Lumberjack(startPos.x, startPos.z);
+        this.loggers.push(logger);
+        this.scene.add(logger.mesh);
+      }
+
+      startNextLevel() {
+        if (this.isPaused) return;
+
+        document.getElementById('level-up-overlay').style.display = 'none';
+
+        this.gridW = Math.floor(this.gridW * 1.20);
+        this.gridH = Math.floor(this.gridH * 1.20);
+
+        this.level++;
+        this.wave = 1;
+
+        this.enemySpeedMult = 1 + 0.10 * (this.level - 1);
+
+        this.towers.forEach(t => this.scene.remove(t.mesh));
+        this.towers = [];
+
+        this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
+        this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
+        this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
+        this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
+        this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
+
+        this.spawnQueue = [];
+        this.waveActive = false;
+        document.getElementById('next-wave-btn').disabled = false;
+
+        this.createMap();
+        this.createDecorations();
+        this.initAnimals();
+        this.updateCameraPos(true);
+
+        // ✅ 重置倒數（100 秒）
+        this.autoStartTimer = 0;
+        this.updateAutoStartHUD();
+
+        document.getElementById('level-txt').innerText = this.level;
+        this.updateUI();
+      }
+
+      nextWave() {
+        if (!this.canAct()) return;
+        if(this.waveActive) return;
+        this.waveActive = true;
+        document.getElementById('next-wave-btn').disabled = true;
+
+        // 開戰後不顯示倒數
+        this.autoStartTimer = 0;
+        this.updateAutoStartHUD();
+
+        const activePaths = this.getPaths();
+        const groups = 8 + Math.floor(this.wave * 2);
+        const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
+        let spawnDelayBase = Math.max(8, 35 - (this.wave * 2) - Math.floor(this.level * 1.5));
+
+        for(let i=0; i<groups; i++) {
+          const baseDelay = i * spawnDelayBase;
+          for (let j = 0; j < 6; j++) {
+            let type = 'NORMAL';
+            const rand = Math.random();
+            if (this.wave >= 1 && rand > 0.5) type = 'FAST';
+            if (this.wave >= 2 && rand > 0.7) type = 'SHOOTER';
+            if (this.wave >= 3 && rand > 0.8) type = 'TANK';
+            if (this.wave >= 4 && Math.random() > 0.85) type = 'FLYING';
+
+            let path = activePaths[j % activePaths.length];
+            if (type === 'FLYING') path = activePaths[Math.floor(Math.random() * activePaths.length)];
+            this.spawnQueue.push({ type, hpMult, path, delay: baseDelay + (j * 3) });
+          }
+          if (this.wave >= 2 && Math.random() > 0.85) {
+            for(let b=0; b<4; b++) {
+              this.spawnQueue.push({ type: 'BOMBER', hpMult, path: activePaths[b % activePaths.length], delay: baseDelay + 15 + (b * 2) });
             }
-            dispose() { this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
+          }
         }
 
-        class Tower {
-            constructor(gx, gz, type) {
-                this.gx = gx; this.gz = gz; this.type = type; this.level = 1; this.cooldown = 0; this.maxHp = 500; this.hp = this.maxHp;
-                const data = TOWER_DATA[type]; this.mesh = new THREE.Group(); this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
-                const baseGeo = new THREE.CylinderGeometry(2, 2.2, 1, 8);
-                const baseMat = new THREE.MeshPhongMaterial({ color: 0x546e7a });
-                const base = new THREE.Mesh(baseGeo, baseMat); base.position.y = 0.5; base.castShadow = true; this.mesh.add(base);
-                this.head = new THREE.Group(); this.head.position.y = 1;
-                let headMesh;
-                if (type === 'ARCHER') {
-                    const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshPhongMaterial({color: data.color}));
-                    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3), new THREE.MeshPhongMaterial({color: 0x333}));
-                    barrel.rotation.x = Math.PI/2; barrel.position.z = 1.5; this.head.add(body, barrel);
-                }
-                else if (type === 'ICE') {
-                    const geo = new THREE.OctahedronGeometry(1.2);
-                    headMesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: data.color, transparent:true, opacity:0.8}));
-                    this.head.add(headMesh);
-                    this.animator = () => { headMesh.rotation.y += 0.05; headMesh.rotation.x += 0.02; };
-                }
-                else if (type === 'FIRE') {
-                    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5, 3, 8, 1, true), new THREE.MeshPhongMaterial({color: data.color, side: THREE.DoubleSide}));
-                    cone.rotation.x = Math.PI/2; cone.position.z = 1; this.head.add(cone);
-                }
-                else if (type === 'LASER') {
-                    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 16), new THREE.MeshPhongMaterial({color: data.color, emissive: data.color, emissiveIntensity: 0.5}));
-                    this.head.add(sphere);
-                    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1), new THREE.MeshBasicMaterial({color: 0xffffff}));
-                    lens.rotation.x = Math.PI/2; lens.position.z = 1; this.head.add(lens);
-                }
-                this.mesh.add(this.head);
-            }
-            getRange() { return TOWER_DATA[this.type].range * (1 + 0.1*(this.level-1)); }
-            getDamage() { return TOWER_DATA[this.type].damage * (1 + 0.4*(this.level-1)); }
-            getRate() { return Math.max(5, TOWER_DATA[this.type].rate - (this.level * 2)); }
-            takeDamage(amount) { this.hp -= amount; if(game.selectedTower === this) game.updatePanelInfo(); if (this.hp <= 0) game.removeTower(this); }
-            update(enemies) {
-                if (game.isPaused) return; // ✅ 暫停鎖住塔攻擊
-                if (this.animator) this.animator();
-                if (this.cooldown > 0) {
-                    this.cooldown--;
-                    if (this.type === 'LASER' && this.laserMesh) {
-                        this.laserMesh.material.opacity -= 0.1;
-                        if (this.laserMesh.material.opacity <= 0) { this.mesh.remove(this.laserMesh); this.laserMesh = null; }
-                    }
-                    return;
-                }
-                const range = this.getRange() * TILE_SIZE; let target = null; let minDist = range;
-                for (let e of enemies) { const d = this.mesh.position.distanceTo(e.mesh.position); if (d <= range && d < minDist) { minDist = d; target = e; } }
-                if (target) {
-                    this.head.lookAt(target.mesh.position); const dmg = this.getDamage();
-                    if (this.type === 'LASER') { target.takeDamage(dmg); this.createLaserBeam(target.mesh.position); this.cooldown = 10; AudioSys.laser(); }
-                    else { game.projectiles.push(new Projectile(this.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), target, this.type, dmg)); this.cooldown = this.getRate(); AudioSys.shoot(); }
-                }
-            }
-            createLaserBeam(targetPos) {
-                if (this.laserMesh) this.mesh.remove(this.laserMesh);
-                const points = [];
-                points.push(new THREE.Vector3(0, 2, 0));
-                const localTarget = this.mesh.worldToLocal(targetPos.clone());
-                points.push(localTarget);
-                const geo = new THREE.BufferGeometry().setFromPoints(points);
-                const mat = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2, transparent: true, opacity: 1 });
-                this.laserMesh = new THREE.Line(geo, mat);
-                this.mesh.add(this.laserMesh);
-            }
-            upgrade() { this.level++; const s = 1 + (this.level * 0.1); this.mesh.scale.set(s, s, s); this.maxHp += 500; this.hp = this.maxHp; }
+        this.bossesRemainingInWave = 1 + Math.floor(Math.random() * 4);
+        this.spawnBossSequence(groups * spawnDelayBase);
+      }
+
+      spawnBossSequence(baseDelay = 0) {
+        if (this.bossesRemainingInWave <= 0) return;
+        this.bossesRemainingInWave--;
+
+        const activePaths = this.getPaths();
+        const bossPath = activePaths[Math.floor(Math.random() * activePaths.length)];
+        const hpMult = Math.pow(1.5, (this.level-1)*5 + this.wave - 1);
+
+        this.spawnQueue.push({ type: 'BOSS', hpMult, path: bossPath, delay: baseDelay });
+
+        const isAmbush = this.enemies.length < 5;
+        const guards = ['BOMBER', 'BOMBER', 'SHOOTER', 'SHOOTER'];
+        guards.forEach((gType, idx) => {
+          let opts = { type: gType, hpMult, delay: baseDelay + 5 + (idx * 3) };
+          if (isAmbush) opts.spawnLoc = this.getRandomFreeTile();
+          else opts.path = bossPath;
+          this.spawnQueue.push(opts);
+        });
+      }
+
+      spawnEnemy() {
+        if(this.spawnQueue.length === 0) return;
+        const next = this.spawnQueue[0];
+        if(next.delay > 0) { next.delay--; return; }
+        this.spawnQueue.shift();
+        const enemy = new Enemy(next);
+        this.enemies.push(enemy);
+        this.scene.add(enemy.mesh);
+
+        if (enemy.isStationary) {
+          AudioSys.teleport();
+          this.particles.push(new EffectParticle(enemy.mesh.position.x, 2, enemy.mesh.position.z, 0x9c27b0, 'burst', 2));
+        }
+      }
+
+      // ✅ 修正：暫停時不呼叫 clock.getDelta()（避免解除暫停 dt 爆大）
+      update() {
+        // 暫停：只渲染
+        if (this.isPaused) {
+          this.renderer.render(this.scene, this.camera);
+          return;
+        }
+        if (this.lives <= 0) return;
+
+        const dt = this.clock.getDelta();
+
+        // ✅ 100 秒強制迎戰（未開戰才倒數）
+        const levelUpShown = document.getElementById('level-up-overlay').style.display === 'flex';
+        if (!this.waveActive && !levelUpShown) {
+          this.autoStartTimer += dt;
+          this.updateAutoStartHUD();
+          if (this.autoStartTimer >= this.autoStartLimit) this.nextWave();
+        } else {
+          this.updateAutoStartHUD();
         }
 
-        class Projectile {
-            constructor(startPos, target, type, damage) {
-                this.pos = startPos; this.target = target; this.type = type; this.damage = damage; this.active = true;
-                this.speed = type === 'ARCHER' ? 1.0 : 0.8;
-                const color = TOWER_DATA[type].color;
-                let geo = new THREE.SphereGeometry(0.3);
-                if (type === 'ARCHER') geo = new THREE.BoxGeometry(0.2, 0.2, 0.8);
-                this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: color }));
-                this.mesh.position.copy(startPos);
-                game.scene.add(this.mesh);
-                this.lastTargetPos = target.mesh.position.clone();
+        if (this.waveActive) {
+          this.spawnEnemy();
+
+          if (this.spawnQueue.length === 0 && this.enemies.length === 0 && this.bossesRemainingInWave === 0) {
+            if (this.wave % 5 === 0) {
+              document.getElementById('level-up-overlay').style.display = 'flex';
+              document.getElementById('levelup-info').innerText = `地圖擴張 +20% | 入口增加 | 敵人更快 | 塔全清空`;
+              this.waveActive = false;
+              this.updateAutoStartHUD();
+            } else {
+              this.endWave();
             }
-            update() {
-                if (game.isPaused) return; // ✅ 暫停鎖住彈道
-                let targetPos = this.lastTargetPos;
-                if (game.enemies.includes(this.target)) { targetPos = this.target.mesh.position; this.lastTargetPos = targetPos.clone(); }
-                const dir = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
-                this.mesh.position.add(dir.multiplyScalar(this.speed * TILE_SIZE * 0.2));
-                this.mesh.lookAt(targetPos);
-                if (this.mesh.position.distanceTo(targetPos) < 1.0) this.hit(targetPos);
-            }
-            hit(pos) {
-                this.active = false;
-                if (this.type === 'FIRE') {
-                    game.particles.push(new EffectParticle(pos.x, pos.y, pos.z, 0xff5722, 'explode', 2));
-                    game.enemies.forEach(e => { if (e.mesh.position.distanceTo(pos) < 2.5 * TILE_SIZE) e.takeDamage(this.damage); });
-                } else if (this.type === 'ICE') {
-                    if (game.enemies.includes(this.target)) { this.target.takeDamage(this.damage); this.target.isSlowed = 60; }
-                } else {
-                    if (game.enemies.includes(this.target)) this.target.takeDamage(this.damage);
-                }
-            }
+          }
         }
 
-        class EffectParticle {
-            constructor(x, y, z, color, type='burst', scale=1) {
-                this.life = 1.0;
-                this.mesh = new THREE.Group();
-                this.type = type;
-                const count = type === 'explode' ? 8 : (type === 'hit' ? 2 : 4);
-                for(let i=0; i<count; i++) {
-                    const size = (Math.random() * 0.4 + 0.1) * scale;
-                    const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial({color: color, transparent:true, opacity:1}));
-                    p.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5+0.5, (Math.random()-0.5)*0.5);
-                    this.mesh.add(p);
-                }
-                this.mesh.position.set(x, y, z);
-                game.scene.add(this.mesh);
-            }
-            update() {
-                if (game.isPaused) return true; // ✅ 暫停時粒子不消失（畫面看起來更「凍結」）
-                this.life -= 0.05;
-                this.mesh.children.forEach(p => {
-                    p.position.add(p.userData.velocity);
-                    p.rotation.x += 0.1;
-                    p.userData.velocity.y -= 0.02;
-                    p.material.opacity = Math.max(0, this.life);
-                });
-                return this.life > 0;
-            }
+        if (Math.random() < 0.005 + (this.plants.length * 0.002)) {
+          if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
         }
 
-        const game = new Game3D();
-    </script>
+        if (Math.random() < 0.003 && this.loggers.length < 3) this.spawnLogger();
+
+        this.animals.forEach(a => a.update());
+        for (let i = this.worms.length - 1; i >= 0; i--) this.worms[i].update(this.plants);
+        for (let i = this.loggers.length - 1; i >= 0; i--) this.loggers[i].update(this.decorations);
+        for (let i = this.plants.length - 1; i >= 0; i--) this.plants[i].update();
+
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+          const e = this.enemies[i];
+          const status = e.update(this.animals, this.towers);
+          if (status === 'REACHED') {
+            this.lives--;
+            AudioSys.error();
+            this.removeEnemy(e);
+            this.camera.position.x += (Math.random()-0.5);
+            setTimeout(()=>this.camera.position.x = this.cameraTarget.x, 50);
+            if(this.lives <= 0) this.gameOver("基地被摧毀");
+          }
+        }
+
+        this.towers.forEach(t => t.update(this.enemies));
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+          const p = this.projectiles[i];
+          if (!p.active) {
+            this.scene.remove(p.mesh);
+            this.projectiles.splice(i, 1);
+          } else {
+            p.update();
+          }
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          if(!this.particles[i].update()) {
+            this.scene.remove(this.particles[i].mesh);
+            this.particles.splice(i, 1);
+          }
+        }
+
+        this.updateUI();
+      }
+
+      endWave() {
+        this.waveActive = false;
+        this.wave++;
+        this.money += 200 + (this.wave * 30);
+        document.getElementById('next-wave-btn').disabled = false;
+        AudioSys.build();
+
+        // ✅ 每波結束重新開始 100 秒倒數
+        this.autoStartTimer = 0;
+        this.updateAutoStartHUD();
+      }
+
+      removeEnemy(e) {
+        if (e.type === 'BOSS' && this.bossesRemainingInWave > 0) this.spawnBossSequence(100);
+        this.scene.remove(e.mesh);
+        e.dispose();
+        const idx = this.enemies.indexOf(e);
+        if (idx > -1) this.enemies.splice(idx, 1);
+      }
+
+      removeAnimal(a) {
+        this.scene.remove(a.mesh);
+        const idx = this.animals.indexOf(a);
+        if (idx > -1) this.animals.splice(idx, 1);
+        document.getElementById('animals-txt').innerText = this.animals.length;
+        AudioSys.animalDie();
+        this.gameOver("小動物被殺死了！我們沒能保護它...");
+      }
+
+      removeTower(t) {
+        this.scene.remove(t.mesh);
+        if (this.grid[t.gx] && this.grid[t.gx][t.gz]) this.grid[t.gx][t.gz].tower = null;
+        const idx = this.towers.indexOf(t);
+        if (idx > -1) this.towers.splice(idx, 1);
+        game.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xff0000, 'explode', 2));
+        AudioSys.towerDestroy();
+        const msg = document.getElementById('tower-destroyed-msg');
+        msg.style.opacity = 1;
+        setTimeout(() => msg.style.opacity = 0, 1500);
+        if(this.selectedTower === t) this.closePanel();
+      }
+
+      selectBuildType(type) {
+        if (this.isPaused) return;
+        document.querySelectorAll('.tower-card').forEach(el => el.classList.remove('active'));
+        if (type === null || this.buildType === type) {
+          this.buildType = null;
+          this.ghostMesh.visible = false;
+          this.rangeCircle.visible = false;
+          return;
+        }
+        this.buildType = type;
+        const btnId =
+          type === 'FRUIT' ? 'btn-fruit' :
+          type === 'VEGGIE' ? 'btn-veggie' :
+          `btn-${type.toLowerCase()}`;
+        const btn = document.getElementById(btnId);
+        if (btn) btn.classList.add('active');
+
+        this.closePanel();
+        const isFarm = FARM_DATA[type] !== undefined;
+        if (!isFarm) {
+          this.rangeCircle.visible = true;
+          const data = TOWER_DATA[type];
+          this.rangeCircle.geometry = new THREE.RingGeometry(data.range * TILE_SIZE - 0.5, data.range * TILE_SIZE, 64);
+        } else {
+          this.rangeCircle.visible = false;
+        }
+      }
+
+      getGridPos(event) {
+        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const target = new THREE.Vector3();
+        this.raycaster.ray.intersectPlane(plane, target);
+        if (target) {
+          const gx = Math.round(target.x / TILE_SIZE);
+          const gz = Math.round(target.z / TILE_SIZE);
+          return { x: gx, z: gz, worldX: gx * TILE_SIZE, worldZ: gz * TILE_SIZE };
+        }
+        return null;
+      }
+
+      onMouseDown(e) {
+        if (this.isPaused) return;
+        if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
+          this.isDragging = true;
+          this.lastDragX = e.clientX;
+          this.lastDragY = e.clientY;
+          return;
+        }
+      }
+
+      onMouseUp() { this.isDragging = false; }
+
+      onWheel(e) {
+        if (this.isPaused) return;
+        e.preventDefault();
+        const delta = Math.sign(e.deltaY);
+        this.camera.position.y = Math.max(20, Math.min(400, this.camera.position.y + delta * 10));
+        this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
+      }
+
+      onMouseMove(e) {
+        if (this.isPaused) return;
+
+        if (this.isDragging) {
+          const dx = e.clientX - this.lastDragX;
+          const dy = e.clientY - this.lastDragY;
+          this.lastDragX = e.clientX;
+          this.lastDragY = e.clientY;
+
+          const panSpeed = 0.12 * (this.camera.position.y / 80);
+          this.cameraTarget.x -= dx * panSpeed;
+          this.cameraTarget.z += dy * panSpeed;
+
+          this.clampCamera();
+          const y = this.camera.position.y;
+          const backOffset = (this.camera.position.z - this.cameraTarget.z);
+          this.camera.position.set(this.cameraTarget.x, y, this.cameraTarget.z + backOffset);
+          this.camera.lookAt(this.cameraTarget.x, 0, this.cameraTarget.z);
+          return;
+        }
+
+        const pos = this.getGridPos(e);
+        if (pos && pos.x >= 0 && pos.x < this.gridW && pos.z >= 0 && pos.z < this.gridH) {
+          if (this.buildType) {
+            this.ghostMesh.position.set(pos.worldX, 1, pos.worldZ);
+            this.ghostMesh.visible = true;
+            const cell = this.grid[pos.x][pos.z];
+            const canBuild = cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration;
+            this.ghostMesh.children[0].material.color.setHex(canBuild ? 0x76ff03 : 0xff1744);
+            if (TOWER_DATA[this.buildType]) this.rangeCircle.position.set(pos.worldX, 1, pos.worldZ);
+          }
+        } else {
+          this.ghostMesh.visible = false;
+        }
+      }
+
+      onClick(e) {
+        if (!this.canAct()) return;
+        if (e.target.closest('button') || e.target.closest('.tower-card')) return;
+
+        this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
+        if (wormIntersects.length > 0) {
+          const clickedMesh = wormIntersects[0].object.parent;
+          const worm = this.worms.find(w => w.mesh === clickedMesh || w.mesh.children.includes(clickedMesh));
+          if (worm) { this.catchWorm(worm); return; }
+        }
+
+        const pos = this.getGridPos(e);
+        if (!pos || pos.x < 0 || pos.x >= this.gridW || pos.z < 0 || pos.z >= this.gridH) return;
+        const cell = this.grid[pos.x][pos.z];
+
+        if (this.buildType) {
+          if (cell.type === 0 && cell.tower === null && cell.plant === null && !cell.hasDecoration) {
+            if (FARM_DATA[this.buildType]) {
+              if (this.money >= FARM_DATA[this.buildType].cost) this.buildPlant(pos.x, pos.z, this.buildType);
+              else AudioSys.error();
+            } else {
+              if (this.money >= TOWER_DATA[this.buildType].cost) this.buildTower(pos.x, pos.z, this.buildType);
+              else AudioSys.error();
+            }
+          }
+        } else {
+          if (cell.plant) cell.plant.tryHarvest();
+          else if (cell.tower) this.selectTower(cell.tower);
+          else this.closePanel();
+        }
+      }
+
+      buildTower(gx, gz, type) {
+        if (!this.canAct()) return;
+        this.money -= TOWER_DATA[type].cost;
+        const t = new Tower(gx, gz, type);
+        this.scene.add(t.mesh);
+        this.towers.push(t);
+        this.grid[gx][gz].tower = t;
+        AudioSys.build();
+        this.particles.push(new EffectParticle(t.mesh.position.x, 2, t.mesh.position.z, 0xffffff, 'burst'));
+        this.selectBuildType(null);
+        this.updateUI();
+      }
+
+      buildPlant(gx, gz, type) {
+        if (!this.canAct()) return;
+        this.money -= FARM_DATA[type].cost;
+        const p = new Plant(gx, gz, type);
+        this.scene.add(p.mesh);
+        this.plants.push(p);
+        this.grid[gx][gz].plant = p;
+        AudioSys.build();
+        this.particles.push(new EffectParticle(p.mesh.position.x, 1, p.mesh.position.z, 0x8d6e63, 'burst'));
+        this.selectBuildType(null);
+        this.updateUI();
+      }
+
+      selectTower(tower) {
+        if (!this.canAct()) return;
+        this.selectedTower = tower;
+        this.rangeCircle.visible = true;
+        this.rangeCircle.position.set(tower.mesh.position.x, 1, tower.mesh.position.z);
+        const r = tower.getRange() * TILE_SIZE;
+        this.rangeCircle.geometry = new THREE.RingGeometry(r-0.5, r, 64);
+        const p = document.getElementById('upgrade-panel');
+        p.style.display = 'block';
+        document.getElementById('up-name').innerText = TOWER_DATA[tower.type].name;
+        this.updatePanelInfo();
+      }
+
+      updatePanelInfo() {
+        if (!this.selectedTower) return;
+        const t = this.selectedTower;
+        const cost = Math.floor(TOWER_DATA[t.type].cost * 1.5 * t.level);
+        document.getElementById('up-level').innerText = t.level;
+        document.getElementById('up-dmg').innerText = (t.getDamage()).toFixed(1);
+        document.getElementById('up-range').innerText = t.getRange();
+        document.getElementById('btn-upgrade').innerText = `升級 ($${cost})`;
+        document.getElementById('btn-upgrade').disabled = this.money < cost || this.isPaused;
+        document.getElementById('up-hp').innerText = Math.floor(t.hp);
+        document.getElementById('up-max-hp').innerText = t.maxHp;
+        document.getElementById('up-hp-bar').style.width = (t.hp / t.maxHp * 100) + '%';
+      }
+
+      upgradeTower() {
+        if (!this.canAct()) return;
+        if(!this.selectedTower) return;
+        const t = this.selectedTower;
+        const cost = Math.floor(TOWER_DATA[t.type].cost * 1.5 * t.level);
+        if (this.money >= cost) {
+          this.money -= cost;
+          t.upgrade();
+          AudioSys.build();
+          this.particles.push(new EffectParticle(t.mesh.position.x, 4, t.mesh.position.z, 0xffff00, 'burst'));
+          this.updatePanelInfo();
+          this.updateUI();
+        }
+      }
+
+      sellTower() {
+        if (!this.canAct()) return;
+        if(!this.selectedTower) return;
+        const t = this.selectedTower;
+        const val = Math.floor(TOWER_DATA[t.type].cost * 0.4 * t.level);
+        this.money += val;
+        this.scene.remove(t.mesh);
+        this.grid[t.gx][t.gz].tower = null;
+        this.towers = this.towers.filter(x => x !== t);
+        AudioSys.build();
+        this.closePanel();
+        this.updateUI();
+      }
+
+      closePanel() {
+        this.selectedTower = null;
+        document.getElementById('upgrade-panel').style.display = 'none';
+        if (!this.buildType) this.rangeCircle.visible = false;
+      }
+
+      updateUI() {
+        document.getElementById('lives-txt').innerText = this.lives;
+        document.getElementById('money-txt').innerText = this.money;
+        document.getElementById('wave-txt').innerText = this.wave;
+        document.getElementById('enemies-txt').innerText = this.spawnQueue.length + this.enemies.length;
+        document.getElementById('level-txt').innerText = this.level;
+        if(this.selectedTower) this.updatePanelInfo();
+      }
+
+      gameOver(reason) {
+        document.getElementById('game-over').style.display = 'flex';
+        document.getElementById('go-title').innerText = "GAME OVER";
+        document.getElementById('go-reason').innerHTML = `${reason}<br>最終波次: <span style="color:#ffeb3b">${this.wave}</span>`;
+        this.renderer.setAnimationLoop(null);
+        AudioSys.stopBGM();
+        this.updateAutoStartHUD();
+      }
+
+      onResize() {
+        const aspect = window.innerWidth / window.innerHeight;
+        this.camera.aspect = aspect;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      animate() {
+        this.renderer.setAnimationLoop(() => {
+          this.update();
+          this.renderer.render(this.scene, this.camera);
+        });
+      }
+    }
+
+    // ==========================================
+    // 伐木工
+    // ==========================================
+    class Lumberjack {
+      constructor(x, z) {
+        this.mesh = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.5), new THREE.MeshLambertMaterial({color: 0xd32f2f}));
+        body.position.y = 0.75;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshLambertMaterial({color: 0xffccbc}));
+        head.position.y = 1.8;
+        const hat = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.8), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+        hat.position.y = 2.4;
+
+        const axeHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshLambertMaterial({color: 0x8d6e63}));
+        axeHandle.rotation.x = Math.PI/2; axeHandle.position.set(0.5, 1, 0.5);
+        const axeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.4), new THREE.MeshLambertMaterial({color: 0x90a4ae}));
+        axeBlade.position.set(0.5, 1, 1);
+
+        this.mesh.add(body, head, hat, axeHandle, axeBlade);
+        this.mesh.position.set(x, 0, z);
+        this.mesh.castShadow = true;
+        this.axe = axeHandle;
+
+        this.targetTree = null;
+        this.state = 'MOVING';
+        this.timer = 0;
+        this.chopDuration = (60 + Math.random() * 30) * 60;
+        this.speed = 0.05;
+
+        const barGroup = new THREE.Group();
+        const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.3), new THREE.MeshBasicMaterial({color: 0x333333}));
+        const fg = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.2), new THREE.MeshBasicMaterial({color: 0xffab00}));
+        fg.position.z = 0.01;
+        barGroup.add(bg, fg);
+        barGroup.position.y = 3.5;
+        barGroup.visible = false;
+        this.progressBar = fg;
+        this.barGroup = barGroup;
+        this.mesh.add(barGroup);
+      }
+
+      update(decorations) {
+        if (game.isPaused) return;
+
+        this.barGroup.lookAt(game.camera.position);
+
+        if (!this.targetTree) {
+          let minDist = Infinity;
+          let nearest = null;
+          for (let d of decorations) {
+            if (d.type === 'tree') {
+              const dist = this.mesh.position.distanceTo(d.mesh.position);
+              if (dist < minDist) { minDist = dist; nearest = d; }
+            }
+          }
+          this.targetTree = nearest;
+          if(!nearest) {
+            game.scene.remove(this.mesh);
+            game.loggers = game.loggers.filter(l => l !== this);
+            return;
+          }
+        }
+
+        if (this.state === 'MOVING') {
+          const targetPos = this.targetTree.mesh.position;
+          const dist = this.mesh.position.distanceTo(targetPos);
+          if (dist > 1.5) {
+            this.mesh.lookAt(targetPos);
+            this.mesh.translateZ(this.speed);
+            this.mesh.position.y = Math.sin(Date.now() * 0.01) * 0.1;
+          } else {
+            this.state = 'CHOPPING';
+            this.barGroup.visible = true;
+          }
+        } else if (this.state === 'CHOPPING') {
+          this.timer++;
+          this.axe.rotation.x = Math.PI/2 + Math.sin(Date.now() * 0.01) * 0.5;
+          const progress = this.timer / this.chopDuration;
+          this.progressBar.scale.x = progress;
+          if (this.timer >= this.chopDuration) this.finishJob();
+        }
+      }
+
+      finishJob() {
+        game.scene.remove(this.targetTree.mesh);
+        game.grid[this.targetTree.x][this.targetTree.z].hasDecoration = false;
+        game.decorations = game.decorations.filter(d => d !== this.targetTree);
+
+        game.money += 800;
+        game.updateUI();
+        AudioSys.harvest();
+        AudioSys.chop();
+
+        const text = document.createElement('div');
+        text.className = 'float-text wood';
+        text.innerText = `+$800 (木材)`;
+        const vec = this.mesh.position.clone();
+        vec.y += 3;
+        vec.project(game.camera);
+        const x = (vec.x * .5 + .5) * window.innerWidth;
+        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+        text.style.left = `${x}px`;
+        text.style.top = `${y}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 1000);
+
+        game.scene.remove(this.mesh);
+        game.loggers = game.loggers.filter(l => l !== this);
+        game.particles.push(new EffectParticle(this.mesh.position.x, 1, this.mesh.position.z, 0x795548, 'burst', 2));
+      }
+    }
+
+    // ==========================================
+    // 菜蟲、植物、動物、敵人、塔、防禦彈
+    // ==========================================
+    class Worm {
+      constructor(x, z) {
+        this.mesh = new THREE.Group();
+        const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03}));
+        const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x64dd17})); seg2.position.z = -0.4;
+        const seg3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshLambertMaterial({color: 0x76ff03})); seg3.position.z = -0.8;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshLambertMaterial({color: 0xccff90})); head.position.z = 0.4; head.position.y = 0.1;
+        const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeL.position.set(-0.15, 0.2, 0.7);
+        const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0x000000})); eyeR.position.set(0.15, 0.2, 0.7);
+        this.mesh.add(seg1, seg2, seg3, head, eyeL, eyeR);
+        this.mesh.position.set(x, 0.3, z);
+        this.mesh.castShadow = true;
+        this.targetPlant = null; this.speed = 0.03; this.eatingTimer = 0;
+      }
+      update(plants) {
+        if (game.isPaused) return;
+        if (!this.targetPlant || !plants.includes(this.targetPlant)) {
+          let minDist = Infinity; let nearest = null;
+          for (let p of plants) {
+            const d = this.mesh.position.distanceTo(p.mesh.position);
+            if (d < minDist) { minDist = d; nearest = p; }
+          }
+          this.targetPlant = nearest;
+        }
+        if (this.targetPlant) {
+          const targetPos = this.targetPlant.mesh.position;
+          const dist = this.mesh.position.distanceTo(targetPos);
+          if (dist > 1.0) {
+            this.mesh.lookAt(targetPos);
+            this.mesh.translateZ(this.speed);
+            this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.01) * 0.1;
+          } else {
+            if (this.targetPlant.growth >= this.targetPlant.maxGrowth) {
+              this.eatingTimer++;
+              this.mesh.children.forEach(c => c.material.color.setHex(0xff0000));
+              if (this.eatingTimer > 60) this.eatPlant();
+            } else {
+              this.mesh.children[0].material.color.setHex(0x76ff03);
+              this.eatingTimer = 0;
+            }
+          }
+        }
+      }
+      eatPlant() {
+        if (this.targetPlant) {
+          game.scene.remove(this.targetPlant.mesh);
+          game.grid[this.targetPlant.gx][this.targetPlant.gz].plant = null;
+          game.plants = game.plants.filter(p => p !== this.targetPlant);
+          game.particles.push(new EffectParticle(this.targetPlant.mesh.position.x, 1, this.targetPlant.mesh.position.z, 0x8bc34a, 'burst', 1.0));
+          const text = document.createElement('div');
+          text.className = 'float-text bad';
+          text.innerText = "被吃掉了!";
+          const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
+          const x = (vec.x * .5 + .5) * window.innerWidth;
+          const y = (-(vec.y * .5) + .5) * window.innerHeight;
+          text.style.left = `${x}px`;
+          text.style.top = `${y}px`;
+          document.body.appendChild(text);
+          setTimeout(() => text.remove(), 1000);
+          game.scene.remove(this.mesh);
+          game.worms = game.worms.filter(w => w !== this);
+        }
+      }
+    }
+
+    class Plant {
+      constructor(gx, gz, type) {
+        this.gx = gx; this.gz = gz; this.type = type; this.data = FARM_DATA[type];
+        this.growth = 0; this.maxGrowth = this.data.growTime;
+        this.mesh = new THREE.Group(); this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+
+        const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 8), new THREE.MeshLambertMaterial({color: 0x8bc34a}));
+        sprout.position.y = 0.5;
+        this.mesh.add(sprout);
+        this.visual = sprout;
+
+        if (type === 'FRUIT') {
+          this.matureMesh = new THREE.Group();
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.5), new THREE.MeshLambertMaterial({color: 0x795548})); trunk.position.y = 0.75;
+          const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5), new THREE.MeshLambertMaterial({color: 0x4caf50})); leaves.position.y = 2.5;
+          const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f1.position.set(0.8, 2.5, 0.5);
+          const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f2.position.set(-0.7, 3.0, -0.4);
+          const f3 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color:0xff1744})); f3.position.set(0.2, 2.2, -0.9);
+          this.matureMesh.add(trunk, leaves, f1, f2, f3);
+        } else {
+          this.matureMesh = new THREE.Group();
+          const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 8), new THREE.MeshLambertMaterial({color: 0xff9800}));
+          pumpkin.scale.y = 0.7; pumpkin.position.y = 1;
+          const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5), new THREE.MeshLambertMaterial({color: 0x388e3c}));
+          stem.position.y = 1.8;
+          this.matureMesh.add(pumpkin, stem);
+        }
+
+        this.matureMesh.visible = false;
+        this.matureMesh.scale.set(0.1, 0.1, 0.1);
+        this.mesh.add(this.matureMesh);
+      }
+
+      update() {
+        if (game.isPaused) return;
+        if (this.growth < this.maxGrowth) {
+          this.growth++;
+          const progress = this.growth / this.maxGrowth;
+          if (progress < 0.5) {
+            this.visual.scale.setScalar(1 + progress * 2);
+          } else if (!this.matureMesh.visible) {
+            this.visual.visible = false;
+            this.matureMesh.visible = true;
+          }
+          if (this.matureMesh.visible && progress < 1) {
+            const s = 0.1 + (progress - 0.5) * 2 * 0.9;
+            this.matureMesh.scale.set(s, s, s);
+          }
+        } else {
+          const s = 1 + Math.sin(Date.now() * 0.005) * 0.1;
+          this.matureMesh.scale.set(s, s, s);
+        }
+      }
+
+      tryHarvest() {
+        if (!game.canAct()) return;
+        if (this.growth >= this.maxGrowth) {
+          game.money += this.data.sell;
+          AudioSys.harvest();
+
+          const text = document.createElement('div');
+          text.className = 'float-text';
+          text.innerText = `+$${this.data.sell}`;
+          const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
+          const x = (vec.x * .5 + .5) * window.innerWidth;
+          const y = (-(vec.y * .5) + .5) * window.innerHeight;
+          text.style.left = `${x}px`;
+          text.style.top = `${y}px`;
+          document.body.appendChild(text);
+          setTimeout(() => text.remove(), 1000);
+
+          game.scene.remove(this.mesh);
+          game.grid[this.gx][this.gz].plant = null;
+          game.plants = game.plants.filter(p => p !== this);
+          game.particles.push(new EffectParticle(this.mesh.position.x, 2, this.mesh.position.z, 0xffd700, 'burst', 1.5));
+          game.updateUI();
+        } else {
+          AudioSys.error();
+        }
+      }
+    }
+
+    class Animal {
+      constructor(gx, gz) {
+        this.hpMax = 200;
+        this.hp = this.hpMax;
+
+        this.mesh = new THREE.Group();
+        this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), new THREE.MeshLambertMaterial({color: 0xffccbc}));
+        body.position.y = 0.75; body.castShadow = true;
+
+        const earGeo = new THREE.BoxGeometry(0.5, 1, 0.5);
+        const earL = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earL.position.set(-0.6, 1.8, 0);
+        const earR = new THREE.Mesh(earGeo, new THREE.MeshLambertMaterial({color: 0xffab91})); earR.position.set(0.6, 1.8, 0);
+
+        const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.2), new THREE.MeshLambertMaterial({color: 0xff5722})); nose.position.set(0, 1, 1);
+
+        this.bodyGroup = new THREE.Group();
+        this.bodyGroup.add(body, earL, earR, nose);
+        this.mesh.add(this.bodyGroup);
+
+        const barContainer = new THREE.Group();
+        const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000}));
+        const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x29b6f6}));
+        fg.position.z = 0.01;
+        barContainer.add(bg, fg);
+        barContainer.position.y = 3.5;
+        this.hpBar = fg;
+        this.barContainer = barContainer;
+        this.mesh.add(barContainer);
+
+        this.homePos = this.mesh.position.clone();
+        this.targetPos = this.homePos.clone();
+        this.state = 'IDLE';
+        this.idleTimer = Math.random() * 60 + 30;
+        this.moveSpeed = 0.04;
+      }
+
+      update() {
+        if (game.isPaused) return;
+        this.barContainer.lookAt(game.camera.position);
+
+        if (this.state === 'IDLE') {
+          const time = Date.now() * 0.005;
+          this.bodyGroup.position.y = Math.sin(time) * 0.05;
+          this.bodyGroup.rotation.z = Math.sin(time * 0.5) * 0.02;
+
+          this.idleTimer--;
+          if (this.idleTimer <= 0) this.pickNewTarget();
+        } else if (this.state === 'MOVING') {
+          const currentPos = this.mesh.position;
+          const dist = currentPos.distanceTo(this.targetPos);
+
+          if (dist < 0.1) {
+            this.state = 'IDLE';
+            this.idleTimer = Math.random() * 100 + 50;
+          } else {
+            const dir = new THREE.Vector3().subVectors(this.targetPos, currentPos).normalize();
+            this.mesh.position.add(dir.multiplyScalar(this.moveSpeed));
+
+            const time = Date.now() * 0.015;
+            this.bodyGroup.position.y = Math.abs(Math.sin(time)) * 0.5;
+          }
+        }
+      }
+
+      pickNewTarget() {
+        const range = TILE_SIZE * 2;
+        const dx = (Math.random() - 0.5) * 2 * range;
+        const dz = (Math.random() - 0.5) * 2 * range;
+        this.targetPos.set(this.homePos.x + dx, 0, this.homePos.z + dz);
+
+        this.targetPos.x = Math.max(0, Math.min(this.targetPos.x, game.gridW * TILE_SIZE));
+        this.targetPos.z = Math.max(0, Math.min(this.targetPos.z, game.gridH * TILE_SIZE));
+
+        this.state = 'MOVING';
+      }
+
+      updateBar() { const pct = Math.max(0, this.hp / this.hpMax); this.hpBar.scale.x = pct; }
+      takeDamage(amt) { this.hp -= amt; this.updateBar(); if (this.hp <= 0) game.removeAnimal(this); }
+    }
+
+    class Enemy {
+      constructor(opts) {
+        this.type = opts.type; this.path = opts.path || []; this.pathIdx = 0; const hpMult = opts.hpMult || 1;
+        this.hpMax = 50 * hpMult; this.speed = 0.08; this.color = 0xffffff; this.reward = 15;
+        this.isSlowed = 0; this.flyHeight = 0; this.attackCooldown = 0; this.damage = 4;
+        this.defense = Math.floor(game.wave * 0.8) + 1; this.attackRange = 3;
+        this.isStationary = false; if (opts.spawnLoc) { this.isStationary = true; this.spawnPos = opts.spawnLoc; }
+
+        let geo;
+        if (this.type === 'NORMAL') { geo = new THREE.DodecahedronGeometry(1.5); this.color = 0x5c6bc0; this.speed = 0.08; }
+        else if (this.type === 'FAST') { geo = new THREE.ConeGeometry(1, 2.5, 8); this.color = 0xffca28; this.speed = 0.15; this.hpMax = 35 * hpMult; this.attackRange = 2; this.damage = 3; }
+        else if (this.type === 'TANK') { geo = new THREE.BoxGeometry(2.5, 2.5, 2.5); this.color = 0x4e342e; this.speed = 0.04; this.hpMax = 150 * hpMult; this.reward = 40; this.damage = 10; this.defense += 3; this.attackRange = 5; }
+        else if (this.type === 'SHOOTER') { geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8); this.color = 0x43a047; this.speed = 0.07; this.hpMax = 40 * hpMult; this.damage = 8; this.attackRange = 18; }
+        else if (this.type === 'BOMBER') { geo = new THREE.IcosahedronGeometry(1.8, 1); this.color = 0x212121; this.speed = 0.05; this.hpMax = 80 * hpMult; this.attackRange = 6; this.defense += 5; this.reward = 50; }
+        else if (this.type === 'FLYING') {
+          geo = new THREE.CylinderGeometry(0.5, 1.5, 0.5, 6);
+          this.color = 0xd81b60; this.speed = 0.1; this.hpMax = 40 * hpMult; this.flyHeight = 8; this.reward = 25;
+          const startP = {x: 0, z: Math.random() * game.gridH};
+          this.customStart = new THREE.Vector3(startP.x * TILE_SIZE, this.flyHeight, startP.z * TILE_SIZE);
+          const endP = {x: game.gridW-2, z: game.gridH-2};
+          this.customTarget = new THREE.Vector3(endP.x * TILE_SIZE, this.flyHeight, endP.z * TILE_SIZE);
+        }
+        else if (this.type === 'BOSS') { geo = new THREE.TorusKnotGeometry(1.5, 0.5, 64, 8); this.color = 0xffd700; this.speed = 0.03; this.hpMax = 50 * hpMult * 30; this.reward = 500; this.defense += 10; this.damage = 50; this.attackRange = 4; }
+
+        this.speed *= game.enemySpeedMult;
+
+        this.hp = this.hpMax;
+        this.mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: this.color }));
+        this.mesh.castShadow = true;
+
+        if (this.isStationary) this.mesh.position.set(this.spawnPos.x + TILE_SIZE/2, 1.5, this.spawnPos.z + TILE_SIZE/2);
+        else if (this.type === 'FLYING') { this.mesh.position.copy(this.customStart); this.mesh.lookAt(this.customTarget); }
+        else { const start = this.path[0]; this.mesh.position.set(start.x * TILE_SIZE, 1.5, start.z * TILE_SIZE); }
+
+        if (this.type === 'BOSS') { this.mesh.scale.set(1.5, 1.5, 1.5); this.mesh.position.y = 3; }
+
+        const barContainer = new THREE.Group();
+        const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({color:0x000000}));
+        const fg = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4), new THREE.MeshBasicMaterial({color:0x76ff03}));
+        fg.position.z = 0.01;
+        barContainer.add(bg, fg);
+        barContainer.position.y = this.type === 'BOSS' ? 5 : 3;
+        this.hpBar = fg;
+        this.mesh.add(barContainer);
+      }
+
+      update(animals, towers) {
+        if (game.isPaused) return 'PAUSED';
+
+        let currentSpeed = this.speed;
+        if (this.isSlowed > 0) { currentSpeed *= 0.6; this.isSlowed--; this.mesh.material.emissive?.setHex?.(0x00ffff); }
+
+        if ((this.type === 'BOMBER' || this.type === 'BOSS') && towers.length > 0) {
+          for(let tower of towers) {
+            const dist = this.mesh.position.distanceTo(tower.mesh.position);
+            if (dist < this.attackRange * TILE_SIZE) {
+              if (this.attackCooldown <= 0) {
+                this.attackCooldown = 150; AudioSys.enemyShoot();
+                const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color:0x000000}));
+                bomb.position.copy(this.mesh.position); bomb.position.y += 2; game.scene.add(bomb);
+                const targetPos = tower.mesh.position.clone(); let t = 0;
+                const animateBomb = setInterval(() => {
+                  if (game.isPaused) return; // 暫停時不跑
+                  t += 0.1; bomb.position.lerp(targetPos, 0.1); bomb.position.y += Math.sin(t * Math.PI) * 0.5;
+                  if (bomb.position.distanceTo(targetPos) < 1) { clearInterval(animateBomb); game.scene.remove(bomb); tower.takeDamage(999); }
+                }, 50);
+              } else { this.attackCooldown--; }
+              return 'ATTACKING_TOWER';
+            }
+          }
+        }
+
+        if (this.type !== 'FLYING' && animals.length > 0) {
+          for(let animal of animals) {
+            const dist = this.mesh.position.distanceTo(animal.mesh.position);
+            if (dist < this.attackRange * TILE_SIZE * 0.8) {
+              if (this.attackCooldown <= 0) {
+                animal.takeDamage(this.damage); this.attackCooldown = 40; AudioSys.enemyShoot();
+                const laserGeo = new THREE.BufferGeometry().setFromPoints([
+                  this.mesh.position.clone().add(new THREE.Vector3(0,1,0)),
+                  animal.mesh.position.clone().add(new THREE.Vector3(0,1,0))
+                ]);
+                const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({color: 0xff0000}));
+                game.scene.add(laser); setTimeout(() => game.scene.remove(laser), 100);
+              } else { this.attackCooldown--; }
+              return 'ATTACKING';
+            }
+          }
+        }
+
+        if (this.isStationary) return 'STATIONARY';
+
+        if (this.type === 'FLYING') {
+          const dir = new THREE.Vector3().subVectors(this.customTarget, this.mesh.position).normalize();
+          this.mesh.position.add(dir.multiplyScalar(currentSpeed * TILE_SIZE));
+          if (this.mesh.position.distanceTo(this.customTarget) < 1) return 'REACHED';
+        } else {
+          const targetNode = this.path[this.pathIdx + 1]; if (!targetNode) return 'REACHED';
+          const tx = targetNode.x * TILE_SIZE; const tz = targetNode.z * TILE_SIZE;
+          const dx = tx - this.mesh.position.x; const dz = tz - this.mesh.position.z;
+          const dist = Math.sqrt(dx*dx + dz*dz); const moveDist = currentSpeed * TILE_SIZE;
+          if (dist < moveDist) {
+            this.mesh.position.x = tx; this.mesh.position.z = tz; this.pathIdx++;
+          } else {
+            this.mesh.position.x += (dx/dist) * moveDist;
+            this.mesh.position.z += (dz/dist) * moveDist;
+          }
+        }
+        return 'MOVING';
+      }
+
+      takeDamage(amt) {
+        const actualDamage = Math.max(1, amt - this.defense);
+        this.hp -= actualDamage;
+        const pct = Math.max(0, this.hp / this.hpMax);
+        this.hpBar.scale.x = pct;
+        this.hpBar.material.color.setHex(pct > 0.5 ? 0x76ff03 : 0xff1744);
+        game.particles.push(new EffectParticle(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, this.color, 'hit', 0.5));
+        if (this.hp <= 0) {
+          game.money += this.reward;
+          game.removeEnemy(this);
+          game.particles.push(new EffectParticle(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, this.color, 'explode'));
+          AudioSys.boom();
+        }
+      }
+      dispose() { this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
+    }
+
+    class Tower {
+      constructor(gx, gz, type) {
+        this.gx = gx; this.gz = gz; this.type = type; this.level = 1; this.cooldown = 0; this.maxHp = 500; this.hp = this.maxHp;
+        const data = TOWER_DATA[type];
+        this.mesh = new THREE.Group();
+        this.mesh.position.set(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+
+        const baseGeo = new THREE.CylinderGeometry(2, 2.2, 1, 8);
+        const baseMat = new THREE.MeshPhongMaterial({ color: 0x546e7a });
+        const base = new THREE.Mesh(baseGeo, baseMat); base.position.y = 0.5; base.castShadow = true;
+        this.mesh.add(base);
+
+        this.head = new THREE.Group(); this.head.position.y = 1;
+
+        if (type === 'ARCHER') {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshPhongMaterial({color: data.color}));
+          const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3), new THREE.MeshPhongMaterial({color: 0x333}));
+          barrel.rotation.x = Math.PI/2; barrel.position.z = 1.5;
+          this.head.add(body, barrel);
+        } else if (type === 'ICE') {
+          const geo = new THREE.OctahedronGeometry(1.2);
+          const headMesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: data.color, transparent:true, opacity:0.8}));
+          this.head.add(headMesh);
+          this.animator = () => { headMesh.rotation.y += 0.05; headMesh.rotation.x += 0.02; };
+        } else if (type === 'FIRE') {
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5, 3, 8, 1, true), new THREE.MeshPhongMaterial({color: data.color, side: THREE.DoubleSide}));
+          cone.rotation.x = Math.PI/2; cone.position.z = 1;
+          this.head.add(cone);
+        } else if (type === 'LASER') {
+          const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 16), new THREE.MeshPhongMaterial({color: data.color, emissive: data.color, emissiveIntensity: 0.5}));
+          this.head.add(sphere);
+          const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1), new THREE.MeshBasicMaterial({color: 0xffffff}));
+          lens.rotation.x = Math.PI/2; lens.position.z = 1;
+          this.head.add(lens);
+        }
+        this.mesh.add(this.head);
+      }
+
+      getRange() { return TOWER_DATA[this.type].range * (1 + 0.1*(this.level-1)); }
+      getDamage() { return TOWER_DATA[this.type].damage * (1 + 0.4*(this.level-1)); }
+      getRate() { return Math.max(5, TOWER_DATA[this.type].rate - (this.level * 2)); }
+
+      takeDamage(amount) { this.hp -= amount; if(game.selectedTower === this) game.updatePanelInfo(); if (this.hp <= 0) game.removeTower(this); }
+
+      update(enemies) {
+        if (game.isPaused) return;
+        if (this.animator) this.animator();
+        if (this.cooldown > 0) { this.cooldown--; return; }
+
+        const range = this.getRange() * TILE_SIZE;
+        let target = null; let minDist = range;
+        for (let e of enemies) {
+          const d = this.mesh.position.distanceTo(e.mesh.position);
+          if (d <= range && d < minDist) { minDist = d; target = e; }
+        }
+        if (target) {
+          this.head.lookAt(target.mesh.position);
+          const dmg = this.getDamage();
+          if (this.type === 'LASER') { target.takeDamage(dmg); this.cooldown = 10; AudioSys.laser(); }
+          else { game.projectiles.push(new Projectile(this.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), target, this.type, dmg)); this.cooldown = this.getRate(); AudioSys.shoot(); }
+        }
+      }
+
+      upgrade() { this.level++; const s = 1 + (this.level * 0.1); this.mesh.scale.set(s, s, s); this.maxHp += 500; this.hp = this.maxHp; }
+    }
+
+    class Projectile {
+      constructor(startPos, target, type, damage) {
+        this.target = target; this.type = type; this.damage = damage; this.active = true;
+        this.speed = type === 'ARCHER' ? 1.0 : 0.8;
+        const color = TOWER_DATA[type].color;
+        let geo = new THREE.SphereGeometry(0.3);
+        if (type === 'ARCHER') geo = new THREE.BoxGeometry(0.2, 0.2, 0.8);
+        this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: color }));
+        this.mesh.position.copy(startPos);
+        game.scene.add(this.mesh);
+        this.lastTargetPos = target.mesh.position.clone();
+      }
+      update() {
+        if (game.isPaused) return;
+        let targetPos = this.lastTargetPos;
+        if (game.enemies.includes(this.target)) { targetPos = this.target.mesh.position; this.lastTargetPos = targetPos.clone(); }
+        const dir = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
+        this.mesh.position.add(dir.multiplyScalar(this.speed * TILE_SIZE * 0.2));
+        if (this.mesh.position.distanceTo(targetPos) < 1.0) this.hit(targetPos);
+      }
+      hit(pos) {
+        this.active = false;
+        if (this.type === 'FIRE') {
+          game.particles.push(new EffectParticle(pos.x, pos.y, pos.z, 0xff5722, 'explode', 2));
+          game.enemies.forEach(e => { if (e.mesh.position.distanceTo(pos) < 2.5 * TILE_SIZE) e.takeDamage(this.damage); });
+        } else if (this.type === 'ICE') {
+          if (game.enemies.includes(this.target)) { this.target.takeDamage(this.damage); this.target.isSlowed = 60; }
+        } else {
+          if (game.enemies.includes(this.target)) this.target.takeDamage(this.damage);
+        }
+      }
+    }
+
+    class EffectParticle {
+      constructor(x, y, z, color, type='burst', scale=1) {
+        this.life = 1.0;
+        this.mesh = new THREE.Group();
+        const count = type === 'explode' ? 8 : (type === 'hit' ? 2 : 4);
+        for(let i=0; i<count; i++) {
+          const size = (Math.random() * 0.4 + 0.1) * scale;
+          const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial({color: color, transparent:true, opacity:1}));
+          p.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5+0.5, (Math.random()-0.5)*0.5);
+          this.mesh.add(p);
+        }
+        this.mesh.position.set(x, y, z);
+        game.scene.add(this.mesh);
+      }
+      update() {
+        if (game.isPaused) return true;
+        this.life -= 0.05;
+        this.mesh.children.forEach(p => {
+          p.position.add(p.userData.velocity);
+          p.rotation.x += 0.1;
+          p.userData.velocity.y -= 0.02;
+          p.material.opacity = Math.max(0, this.life);
+        });
+        return this.life > 0;
+      }
+    }
+
+    const game = new Game3D();
+  </script>
 </body>
 </html>
