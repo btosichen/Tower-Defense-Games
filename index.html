@@ -19,7 +19,7 @@
       position:absolute; inset:0;
       display:flex; flex-direction:column;
       align-items:center;
-      pointer-events:none; /* 重要：讓3D畫面可點，UI內元件再開啟 pointer */
+      pointer-events:none;
       z-index: 900;
     }
 
@@ -151,7 +151,6 @@
     .float-text.wood { color: #795548; font-size: 1.8em; }
     @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-50px); opacity: 0; } }
 
-    /* ✅ 暫停遮罩：擋住 3D 點擊，但不擋 UI (UI z-index > 900) */
     #pause-overlay{
       position: fixed; inset: 0;
       display: none;
@@ -166,7 +165,6 @@
       user-select:none;
     }
 
-    /* ✅ 100 秒倒數 HUD */
     #auto-start-hud{
       position: absolute;
       top: 78px;
@@ -190,7 +188,6 @@
       margin: 0 4px;
     }
 
-    /* 暫停時 UI 視覺降噪 + 鎖定 */
     .paused-dim { opacity: 0.6; filter: grayscale(0.2); }
     .paused-lock { pointer-events: none !important; }
   </style>
@@ -200,10 +197,8 @@
   <div class="diff-tag">任務: 保護活潑的小動物 | 抓菜蟲 | 伐木</div>
   <div id="tower-destroyed-msg">⚠️ 塔被摧毀！</div>
 
-  <!-- ✅ 100 秒倒數 -->
   <div id="auto-start-hud">⏳ 自動開戰倒數 <span class="num" id="auto-start-txt">100</span> 秒（到 0 直接開打）</div>
 
-  <!-- ✅ 暫停遮罩 -->
   <div id="pause-overlay">已暫停</div>
 
   <div id="level-up-overlay" style="position:fixed; inset:0; display:none; z-index:998; background:rgba(0,0,0,0.75); color:#fff; justify-content:center; align-items:center; flex-direction:column; backdrop-filter: blur(4px);">
@@ -231,7 +226,6 @@
       <button id="bgm-toggle" class="icon-btn" onclick="AudioSys.toggleBGM()" title="開關音樂">🎵</button>
     </div>
 
-    <!-- 升級面板 -->
     <div id="upgrade-panel">
       <h2 style="margin:0 0 5px 0; color:#333; border-bottom:2px solid #ffcc80; padding-bottom:5px;" id="up-name">塔名稱</h2>
       <div style="font-size:0.8em; color:#666; margin-bottom:10px;">
@@ -250,7 +244,6 @@
     </div>
 
     <div id="bottom-controls">
-      <!-- 防禦塔區 -->
       <div class="control-group" id="tower-group">
         <div class="tower-card" onclick="game.selectBuildType('ARCHER')" id="btn-archer">
           <div class="tower-icon" style="background: #fff9c4; color:#fbc02d;">🏹</div>
@@ -274,7 +267,6 @@
         </div>
       </div>
 
-      <!-- 農耕區 -->
       <div class="control-group" style="background: rgba(220, 255, 220, 0.6);" id="farm-group">
         <div class="tower-card farm" onclick="game.selectBuildType('FRUIT')" id="btn-fruit">
           <div class="tower-icon" style="background: #ffcdd2; color:#d50000;">🍎</div>
@@ -382,6 +374,9 @@
       VEGGIE: { cost: 80, growTime: 900, sell: 300, name: "大南瓜", color: 0xff9800, type: 'farm' }
     };
 
+    // ✅ 炸彈蟲爆炸範圍（你想更兇，把係數加大）
+    const BOMB_BUG_RADIUS = 2.8 * TILE_SIZE;
+
     class Game3D {
       constructor() {
         this.lives = 20;
@@ -394,6 +389,7 @@
 
         this.enemies = [];
         this.worms = [];
+        this.bombBugs = []; // ✅ 新增：機器炸彈蟲
         this.loggers = [];
         this.towers = [];
         this.plants = [];
@@ -408,17 +404,12 @@
         this.isPaused = false;
         this.bossesRemainingInWave = 0;
 
-        // ✅ 100 秒強制開戰（顯示倒數）
         this.autoStartTimer = 0;
-        this.autoStartLimit = 100; // seconds
+        this.autoStartLimit = 100;
 
-        // ✅ 入口數量隨關卡增加（最多再多 4 個）
         this.extraEntrancesMax = 4;
-
-        // ✅ 敵人速度倍率（關卡越高越快）
         this.enemySpeedMult = 1;
 
-        // ✅ 相機拖曳平移
         this.isDragging = false;
         this.lastDragX = 0;
         this.lastDragY = 0;
@@ -479,30 +470,26 @@
 
         window.addEventListener('resize', () => this.onResize());
 
-        // ✅ 右鍵拖曳 / Shift+左鍵拖曳 平移地圖；滾輪縮放
         window.addEventListener('contextmenu', (e) => e.preventDefault());
         window.addEventListener('mousedown', (e) => this.onMouseDown(e));
         window.addEventListener('mouseup', () => this.onMouseUp());
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
         window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
 
-        // ✅ 點擊操作（抓蟲/蓋塔/採收/選塔）
         window.addEventListener('click', (e) => this.onClick(e));
 
         window.addEventListener('click', () => { if (AudioSys.isBgmMuted) AudioSys.toggleBGM(); }, { once: true });
 
         this.updateUI();
-        this.updateAutoStartHUD(); // ✅ 初始化倒數顯示
+        this.updateAutoStartHUD();
         this.animate();
       }
 
-      // ✅ 倒數 HUD 更新（顯示剩餘秒數）
       updateAutoStartHUD() {
         const hud = document.getElementById('auto-start-hud');
         const txt = document.getElementById('auto-start-txt');
         if (!hud || !txt) return;
 
-        // 只有「未開戰」且「未進結算」才顯示倒數
         const levelUpShown = document.getElementById('level-up-overlay').style.display === 'flex';
         if (this.waveActive || levelUpShown || this.lives <= 0) {
           hud.style.display = 'none';
@@ -514,9 +501,6 @@
         hud.style.display = 'block';
       }
 
-      // ======================
-      // 暫停鎖定：除了 togglePause，其他都擋掉
-      // ======================
       canAct() {
         if (this.lives <= 0) return false;
         return !this.isPaused && document.getElementById('level-up-overlay').style.display !== 'flex';
@@ -530,10 +514,9 @@
         const bottom = document.getElementById('bottom-controls');
         const upgrade = document.getElementById('upgrade-panel');
 
-        // 暫停時，除暫停按鈕外都鎖起來
         const lockEls = [
           document.getElementById('heal-btn'),
-          document.getElementById('bgm-toggle'), // 若你希望暫停也能開關音樂，把這行刪掉
+          document.getElementById('bgm-toggle'),
           document.getElementById('next-wave-btn'),
           document.getElementById('tower-group'),
           document.getElementById('farm-group'),
@@ -555,7 +538,6 @@
           }
         });
 
-        // UI 外觀淡化
         if (isPaused) {
           topBar.classList.add('paused-dim');
           bottom.classList.add('paused-dim');
@@ -567,7 +549,6 @@
         }
       }
 
-      // ✅ 修正：暫停後可以正常繼續（重置 clock delta，避免解除暫停瞬移/倒數跳秒）
       togglePause() {
         this.isPaused = !this.isPaused;
 
@@ -585,8 +566,6 @@
           btn.classList.remove('paused');
           btn.innerText = "⏸️";
           this.setPausedUI(false);
-
-          // ✅ 解除暫停時把 clock delta 歸零，避免 dt 爆大
           this.clock.getDelta();
         }
       }
@@ -868,6 +847,40 @@
         setTimeout(() => text.remove(), 1000);
       }
 
+      // ✅ 新增：炸彈蟲生成/抓取
+      spawnBombBug() {
+        const startPos = this.getRandomFreeTile();
+        const bug = new BombBug(startPos.x, startPos.z);
+        this.bombBugs.push(bug);
+        this.scene.add(bug.mesh);
+      }
+
+      catchBombBug(bug) {
+        if (!this.canAct()) return; // ✅ 暫停不能抓
+        this.scene.remove(bug.mesh);
+        const idx = this.bombBugs.indexOf(bug);
+        if (idx > -1) this.bombBugs.splice(idx, 1);
+
+        this.money += 30;
+        this.updateUI();
+        AudioSys.squish();
+        this.particles.push(new EffectParticle(bug.mesh.position.x, 1, bug.mesh.position.z, 0xff5252, 'burst', 0.7));
+
+        const text = document.createElement('div');
+        text.className = 'float-text';
+        text.style.color = '#ff5252';
+        text.innerText = `拆掉了! +$30`;
+        const vec = bug.mesh.position.clone();
+        vec.y += 2;
+        vec.project(this.camera);
+        const x = (vec.x * .5 + .5) * window.innerWidth;
+        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+        text.style.left = `${x}px`;
+        text.style.top = `${y}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 1000);
+      }
+
       spawnLogger() {
         const startPos = this.getRandomFreeTile();
         const logger = new Lumberjack(startPos.x, startPos.z);
@@ -894,6 +907,7 @@
         this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
         this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
         this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
+        this.bombBugs.forEach(b => this.scene.remove(b.mesh)); this.bombBugs = []; // ✅ 清掉炸彈蟲
         this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
         this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
 
@@ -906,7 +920,6 @@
         this.initAnimals();
         this.updateCameraPos(true);
 
-        // ✅ 重置倒數（100 秒）
         this.autoStartTimer = 0;
         this.updateAutoStartHUD();
 
@@ -920,7 +933,6 @@
         this.waveActive = true;
         document.getElementById('next-wave-btn').disabled = true;
 
-        // 開戰後不顯示倒數
         this.autoStartTimer = 0;
         this.updateAutoStartHUD();
 
@@ -989,9 +1001,7 @@
         }
       }
 
-      // ✅ 修正：暫停時不呼叫 clock.getDelta()（避免解除暫停 dt 爆大）
       update() {
-        // 暫停：只渲染
         if (this.isPaused) {
           this.renderer.render(this.scene, this.camera);
           return;
@@ -1000,7 +1010,6 @@
 
         const dt = this.clock.getDelta();
 
-        // ✅ 100 秒強制迎戰（未開戰才倒數）
         const levelUpShown = document.getElementById('level-up-overlay').style.display === 'flex';
         if (!this.waveActive && !levelUpShown) {
           this.autoStartTimer += dt;
@@ -1029,10 +1038,17 @@
           if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
         }
 
+        // ✅ 炸彈蟲：塔蓋好後才出現，數量 = 菜蟲 * 3（上限避免爆到當機）
+        if (this.towers.length > 0) {
+          const targetCount = Math.min(36, this.worms.length * 3);
+          while (this.bombBugs.length < targetCount) this.spawnBombBug();
+        }
+
         if (Math.random() < 0.003 && this.loggers.length < 3) this.spawnLogger();
 
         this.animals.forEach(a => a.update());
         for (let i = this.worms.length - 1; i >= 0; i--) this.worms[i].update(this.plants);
+        for (let i = this.bombBugs.length - 1; i >= 0; i--) this.bombBugs[i].update(this.towers, dt);
         for (let i = this.loggers.length - 1; i >= 0; i--) this.loggers[i].update(this.decorations);
         for (let i = this.plants.length - 1; i >= 0; i--) this.plants[i].update();
 
@@ -1049,7 +1065,8 @@
           }
         }
 
-        this.towers.forEach(t => t.update(this.enemies));
+        // ✅ 塔防攻擊：也會鎖定炸彈蟲（更刺激）
+        this.towers.forEach(t => t.update(this.enemies, this.bombBugs));
 
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
           const p = this.projectiles[i];
@@ -1078,7 +1095,6 @@
         document.getElementById('next-wave-btn').disabled = false;
         AudioSys.build();
 
-        // ✅ 每波結束重新開始 100 秒倒數
         this.autoStartTimer = 0;
         this.updateAutoStartHUD();
       }
@@ -1220,6 +1236,15 @@
         this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
 
+        // ✅ 先抓炸彈蟲
+        const bombIntersects = this.raycaster.intersectObjects(this.bombBugs.map(b => b.mesh), true);
+        if (bombIntersects.length > 0) {
+          const clickedMesh = bombIntersects[0].object.parent;
+          const bug = this.bombBugs.find(b => b.mesh === clickedMesh || b.mesh.children.includes(clickedMesh));
+          if (bug) { this.catchBombBug(bug); return; }
+        }
+
+        // 原本菜蟲
         const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
         if (wormIntersects.length > 0) {
           const clickedMesh = wormIntersects[0].object.parent;
@@ -1482,7 +1507,7 @@
     }
 
     // ==========================================
-    // 菜蟲、植物、動物、敵人、塔、防禦彈
+    // 菜蟲、炸彈蟲、植物、動物、敵人、塔、防禦彈
     // ==========================================
     class Worm {
       constructor(x, z) {
@@ -1546,6 +1571,137 @@
           game.scene.remove(this.mesh);
           game.worms = game.worms.filter(w => w !== this);
         }
+      }
+    }
+
+    // ✅ 機器炸彈蟲（會貼塔爆炸；被塔打到也會提前爆；爆炸有範圍）
+    class BombBug {
+      constructor(x, z) {
+        this.mesh = new THREE.Group();
+
+        const metal1 = new THREE.MeshLambertMaterial({ color: 0x90a4ae });
+        const metal2 = new THREE.MeshLambertMaterial({ color: 0x607d8b });
+        const bombMat = new THREE.MeshLambertMaterial({ color: 0xff1744, emissive: 0x550000 });
+
+        const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.32), metal1);
+        const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.32), metal2); seg2.position.z = -0.45;
+        const seg3 = new THREE.Mesh(new THREE.SphereGeometry(0.32), metal1); seg3.position.z = -0.9;
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.42), metal2);
+        head.position.z = 0.45; head.position.y = 0.12;
+
+        const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        eyeL.position.set(-0.14, 0.2, 0.72);
+        eyeR.position.set(0.14, 0.2, 0.72);
+
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.18), bombMat);
+        core.position.set(0, 0.2, -0.15);
+        this.core = core;
+
+        const antL = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35), metal1);
+        const antR = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35), metal1);
+        antL.position.set(-0.18, 0.55, 0.55); antL.rotation.x = Math.PI / 5;
+        antR.position.set(0.18, 0.55, 0.55);  antR.rotation.x = Math.PI / 5;
+
+        this.mesh.add(seg1, seg2, seg3, head, eyeL, eyeR, core, antL, antR);
+        this.mesh.position.set(x, 0.3, z);
+        this.mesh.castShadow = true;
+
+        this.speed = 0.03;      // ✅ 跟菜蟲一樣
+        this.targetTower = null;
+
+        this.state = 'MOVING';  // MOVING -> ATTACHED
+        this.fuse = 0;
+        this.fuseElapsed = 0;
+
+        this.isExploded = false;
+      }
+
+      update(towers, dt) {
+        if (this.isExploded) return;
+        if (towers.length <= 0) return;
+
+        const blink = (Math.sin(Date.now() * 0.02) + 1) * 0.5;
+        this.core.scale.setScalar(0.85 + blink * 0.35);
+
+        if (!this.targetTower || !towers.includes(this.targetTower)) {
+          let minDist = Infinity;
+          let nearest = null;
+          for (let t of towers) {
+            const d = this.mesh.position.distanceTo(t.mesh.position);
+            if (d < minDist) { minDist = d; nearest = t; }
+          }
+          this.targetTower = nearest;
+        }
+        if (!this.targetTower) return;
+
+        if (this.state === 'MOVING') {
+          const targetPos = this.targetTower.mesh.position.clone();
+          targetPos.y = 0.3;
+          const dist = this.mesh.position.distanceTo(targetPos);
+
+          if (dist > 1.05) {
+            this.mesh.lookAt(targetPos);
+            this.mesh.translateZ(this.speed);
+            this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.012) * 0.08;
+          } else {
+            this.state = 'ATTACHED';
+            this.fuse = 0.5 + Math.random() * 1.0; // ✅ 0.5~1.5 秒
+            this.fuseElapsed = 0;
+
+            this.mesh.position.copy(this.targetTower.mesh.position);
+            this.mesh.position.y = 2.0 + (this.targetTower.level * 0.1);
+          }
+        } else if (this.state === 'ATTACHED') {
+          this.mesh.rotation.y += 0.12;
+          this.mesh.position.y += Math.sin(Date.now() * 0.02) * 0.02;
+
+          this.fuseElapsed += dt;
+          if (this.fuseElapsed >= this.fuse) this.explode();
+        }
+      }
+
+      // ✅ 被塔打到：直接提前爆（更刺激）
+      takeDamage(_amt) {
+        if (this.isExploded) return;
+        this.explode(true);
+      }
+
+      explode(fromHit=false) {
+        if (this.isExploded) return;
+        this.isExploded = true;
+
+        const pos = this.mesh.position.clone();
+
+        // ✅ 範圍爆炸：附近塔都會受傷（含自己貼的塔）
+        for (let t of game.towers) {
+          const d = t.mesh.position.distanceTo(pos);
+          if (d <= BOMB_BUG_RADIUS) {
+            const falloff = 1 - (d / BOMB_BUG_RADIUS);
+            const dmg = Math.floor(650 * (0.6 + 0.4 * falloff)); // 有距離衰減但仍很痛
+            t.takeDamage(dmg);
+          }
+        }
+
+        // 特效
+        game.particles.push(new EffectParticle(pos.x, 2, pos.z, 0xff1744, 'explode', 2.4));
+        AudioSys.boom();
+
+        const text = document.createElement('div');
+        text.className = 'float-text bad';
+        text.innerText = fromHit ? "💥 被打到提前爆!" : "💥 爆炸!";
+        const vec = pos.clone(); vec.y += 3; vec.project(game.camera);
+        const x = (vec.x * .5 + .5) * window.innerWidth;
+        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+        text.style.left = `${x}px`;
+        text.style.top = `${y}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 900);
+
+        // 移除自己
+        game.scene.remove(this.mesh);
+        game.bombBugs = game.bombBugs.filter(b => b !== this);
       }
     }
 
@@ -1775,7 +1931,7 @@
                 bomb.position.copy(this.mesh.position); bomb.position.y += 2; game.scene.add(bomb);
                 const targetPos = tower.mesh.position.clone(); let t = 0;
                 const animateBomb = setInterval(() => {
-                  if (game.isPaused) return; // 暫停時不跑
+                  if (game.isPaused) return;
                   t += 0.1; bomb.position.lerp(targetPos, 0.1); bomb.position.y += Math.sin(t * Math.PI) * 0.5;
                   if (bomb.position.distanceTo(targetPos) < 1) { clearInterval(animateBomb); game.scene.remove(bomb); tower.takeDamage(999); }
                 }, 50);
@@ -1885,22 +2041,42 @@
 
       takeDamage(amount) { this.hp -= amount; if(game.selectedTower === this) game.updatePanelInfo(); if (this.hp <= 0) game.removeTower(this); }
 
-      update(enemies) {
+      // ✅ 也會攻擊炸彈蟲；且優先打炸彈蟲（保命要緊）
+      update(enemies, bombBugs) {
         if (game.isPaused) return;
         if (this.animator) this.animator();
         if (this.cooldown > 0) { this.cooldown--; return; }
 
         const range = this.getRange() * TILE_SIZE;
-        let target = null; let minDist = range;
-        for (let e of enemies) {
-          const d = this.mesh.position.distanceTo(e.mesh.position);
-          if (d <= range && d < minDist) { minDist = d; target = e; }
+
+        let target = null;
+        let minDist = range;
+
+        // 1) 先找炸彈蟲
+        for (let b of bombBugs) {
+          const d = this.mesh.position.distanceTo(b.mesh.position);
+          if (d <= range && d < minDist) { minDist = d; target = b; }
         }
+        // 2) 沒炸彈蟲才打敵人
+        if (!target) {
+          for (let e of enemies) {
+            const d = this.mesh.position.distanceTo(e.mesh.position);
+            if (d <= range && d < minDist) { minDist = d; target = e; }
+          }
+        }
+
         if (target) {
           this.head.lookAt(target.mesh.position);
           const dmg = this.getDamage();
-          if (this.type === 'LASER') { target.takeDamage(dmg); this.cooldown = 10; AudioSys.laser(); }
-          else { game.projectiles.push(new Projectile(this.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), target, this.type, dmg)); this.cooldown = this.getRate(); AudioSys.shoot(); }
+          if (this.type === 'LASER') {
+            target.takeDamage(dmg);
+            this.cooldown = 10;
+            AudioSys.laser();
+          } else {
+            game.projectiles.push(new Projectile(this.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), target, this.type, dmg));
+            this.cooldown = this.getRate();
+            AudioSys.shoot();
+          }
         }
       }
 
@@ -1919,23 +2095,44 @@
         game.scene.add(this.mesh);
         this.lastTargetPos = target.mesh.position.clone();
       }
+
+      targetAlive() {
+        return game.enemies.includes(this.target) || game.bombBugs.includes(this.target);
+      }
+
       update() {
         if (game.isPaused) return;
+
         let targetPos = this.lastTargetPos;
-        if (game.enemies.includes(this.target)) { targetPos = this.target.mesh.position; this.lastTargetPos = targetPos.clone(); }
+        if (this.targetAlive()) {
+          targetPos = this.target.mesh.position;
+          this.lastTargetPos = targetPos.clone();
+        }
+
         const dir = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
         this.mesh.position.add(dir.multiplyScalar(this.speed * TILE_SIZE * 0.2));
         if (this.mesh.position.distanceTo(targetPos) < 1.0) this.hit(targetPos);
       }
+
       hit(pos) {
         this.active = false;
+
         if (this.type === 'FIRE') {
           game.particles.push(new EffectParticle(pos.x, pos.y, pos.z, 0xff5722, 'explode', 2));
-          game.enemies.forEach(e => { if (e.mesh.position.distanceTo(pos) < 2.5 * TILE_SIZE) e.takeDamage(this.damage); });
+
+          // ✅ 火塔範圍傷害：敵人 + 炸彈蟲 都算
+          const allTargets = game.enemies.concat(game.bombBugs);
+          allTargets.forEach(t => {
+            if (t.mesh.position.distanceTo(pos) < 2.5 * TILE_SIZE) t.takeDamage(this.damage);
+          });
+
         } else if (this.type === 'ICE') {
-          if (game.enemies.includes(this.target)) { this.target.takeDamage(this.damage); this.target.isSlowed = 60; }
+          if (this.targetAlive()) {
+            this.target.takeDamage(this.damage);
+            if (this.target.isSlowed !== undefined) this.target.isSlowed = 60;
+          }
         } else {
-          if (game.enemies.includes(this.target)) this.target.takeDamage(this.damage);
+          if (this.targetAlive()) this.target.takeDamage(this.damage);
         }
       }
     }
