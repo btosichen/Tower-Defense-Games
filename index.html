@@ -211,7 +211,7 @@
     <div id="top-bar">
       <div class="stat">關卡: <span id="level-txt">1</span></div>
       <div class="stat">❤️ <span id="lives-txt">20</span></div>
-      <div class="stat money">💰 <span id="money-txt">900</span></div>
+      <div class="stat money">💰 <span id="money-txt">10000</span></div>
       <div class="stat animals" style="margin-right:0;">🐰 <span id="animals-txt">3</span></div>
 
       <div style="display:flex; align-items:center;">
@@ -374,13 +374,13 @@
       VEGGIE: { cost: 80, growTime: 900, sell: 300, name: "大南瓜", color: 0xff9800, type: 'farm' }
     };
 
-    // ✅ 炸彈蟲爆炸範圍（你想更兇，把係數加大）
+    // ✅ 炸彈蟲爆炸範圍
     const BOMB_BUG_RADIUS = 2.8 * TILE_SIZE;
 
     class Game3D {
       constructor() {
         this.lives = 20;
-        this.money = 900;
+        this.money = 10000; // ✅ 初始金額改為 10000
         this.level = 1;
         this.wave = 1;
 
@@ -389,7 +389,7 @@
 
         this.enemies = [];
         this.worms = [];
-        this.bombBugs = []; // ✅ 新增：機器炸彈蟲
+        this.bombBugs = [];
         this.loggers = [];
         this.towers = [];
         this.plants = [];
@@ -847,7 +847,6 @@
         setTimeout(() => text.remove(), 1000);
       }
 
-      // ✅ 新增：炸彈蟲生成/抓取
       spawnBombBug() {
         const startPos = this.getRandomFreeTile();
         const bug = new BombBug(startPos.x, startPos.z);
@@ -856,7 +855,7 @@
       }
 
       catchBombBug(bug) {
-        if (!this.canAct()) return; // ✅ 暫停不能抓
+        if (!this.canAct()) return;
         this.scene.remove(bug.mesh);
         const idx = this.bombBugs.indexOf(bug);
         if (idx > -1) this.bombBugs.splice(idx, 1);
@@ -907,7 +906,7 @@
         this.enemies.forEach(e => this.scene.remove(e.mesh)); this.enemies = [];
         this.plants.forEach(p => this.scene.remove(p.mesh)); this.plants = [];
         this.worms.forEach(w => this.scene.remove(w.mesh)); this.worms = [];
-        this.bombBugs.forEach(b => this.scene.remove(b.mesh)); this.bombBugs = []; // ✅ 清掉炸彈蟲
+        this.bombBugs.forEach(b => this.scene.remove(b.mesh)); this.bombBugs = [];
         this.loggers.forEach(l => this.scene.remove(l.mesh)); this.loggers = [];
         this.projectiles.forEach(p => this.scene.remove(p.mesh)); this.projectiles = [];
 
@@ -1038,7 +1037,6 @@
           if (this.worms.length < 5 + this.plants.length) this.spawnWorm();
         }
 
-        // ✅ 炸彈蟲：塔蓋好後才出現，數量 = 菜蟲 * 3（上限避免爆到當機）
         if (this.towers.length > 0) {
           const targetCount = Math.min(36, this.worms.length * 3);
           while (this.bombBugs.length < targetCount) this.spawnBombBug();
@@ -1065,7 +1063,6 @@
           }
         }
 
-        // ✅ 塔防攻擊：也會鎖定炸彈蟲（更刺激）
         this.towers.forEach(t => t.update(this.enemies, this.bombBugs));
 
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -1236,7 +1233,6 @@
         this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
 
-        // ✅ 先抓炸彈蟲
         const bombIntersects = this.raycaster.intersectObjects(this.bombBugs.map(b => b.mesh), true);
         if (bombIntersects.length > 0) {
           const clickedMesh = bombIntersects[0].object.parent;
@@ -1244,7 +1240,6 @@
           if (bug) { this.catchBombBug(bug); return; }
         }
 
-        // 原本菜蟲
         const wormIntersects = this.raycaster.intersectObjects(this.worms.map(w => w.mesh), true);
         if (wormIntersects.length > 0) {
           const clickedMesh = wormIntersects[0].object.parent;
@@ -1394,9 +1389,6 @@
       }
     }
 
-    // ==========================================
-    // 伐木工
-    // ==========================================
     class Lumberjack {
       constructor(x, z) {
         this.mesh = new THREE.Group();
@@ -1506,9 +1498,6 @@
       }
     }
 
-    // ==========================================
-    // 菜蟲、炸彈蟲、植物、動物、敵人、塔、防禦彈
-    // ==========================================
     class Worm {
       constructor(x, z) {
         this.mesh = new THREE.Group();
@@ -1574,7 +1563,8 @@
       }
     }
 
-    // ✅ 機器炸彈蟲（會貼塔爆炸；被塔打到也會提前爆；爆炸有範圍）
+    // ✅ 炸彈蟲：必須靠近貼塔後才會爆；貼塔後 0~2 秒內爆炸
+    // ✅ 被塔打到：若已貼塔則立刻爆；若未貼塔則進入狂暴衝刺，貼塔後爆更快（仍需靠近）
     class BombBug {
       constructor(x, z) {
         this.mesh = new THREE.Group();
@@ -1608,14 +1598,19 @@
         this.mesh.position.set(x, 0.3, z);
         this.mesh.castShadow = true;
 
-        this.speed = 0.03;      // ✅ 跟菜蟲一樣
+        this.baseSpeed = 0.03;
+        this.speed = this.baseSpeed;
+
         this.targetTower = null;
 
-        this.state = 'MOVING';  // MOVING -> ATTACHED
+        this.state = 'MOVING'; // MOVING -> ATTACHED
         this.fuse = 0;
         this.fuseElapsed = 0;
 
         this.isExploded = false;
+
+        // ✅ 提前爆的刺激：被打到就進入「狂暴」：更快貼塔、貼塔後更快爆
+        this.forcedByHit = false;
       }
 
       update(towers, dt) {
@@ -1641,31 +1636,65 @@
           targetPos.y = 0.3;
           const dist = this.mesh.position.distanceTo(targetPos);
 
+          // ✅ 被打到後加速（更刺激但仍需靠近）
+          this.speed = this.baseSpeed * (this.forcedByHit ? 2.2 : 1.0);
+
           if (dist > 1.05) {
             this.mesh.lookAt(targetPos);
             this.mesh.translateZ(this.speed);
             this.mesh.position.y = 0.3 + Math.sin(Date.now() * 0.012) * 0.08;
           } else {
+            // ✅ 只有「貼塔」才開始引信（符合：爬到塔上後 2 秒內才能爆）
             this.state = 'ATTACHED';
-            this.fuse = 0.5 + Math.random() * 1.0; // ✅ 0.5~1.5 秒
             this.fuseElapsed = 0;
+
+            // ✅ 2 秒內爆：一般 0~2 秒；被打到則更快（0.15~0.7 秒）
+            if (this.forcedByHit) {
+              this.fuse = 0.15 + Math.random() * 0.55;
+            } else {
+              this.fuse = Math.random() * 2.0; // 0~2 秒
+            }
 
             this.mesh.position.copy(this.targetTower.mesh.position);
             this.mesh.position.y = 2.0 + (this.targetTower.level * 0.1);
           }
         } else if (this.state === 'ATTACHED') {
+          // 跟著塔位置（避免塔被升級/縮放位置抖動）
+          if (this.targetTower) {
+            this.mesh.position.x = this.targetTower.mesh.position.x;
+            this.mesh.position.z = this.targetTower.mesh.position.z;
+          }
+
           this.mesh.rotation.y += 0.12;
           this.mesh.position.y += Math.sin(Date.now() * 0.02) * 0.02;
 
           this.fuseElapsed += dt;
-          if (this.fuseElapsed >= this.fuse) this.explode();
+          if (this.fuseElapsed >= this.fuse) this.explode(this.forcedByHit);
         }
       }
 
-      // ✅ 被塔打到：直接提前爆（更刺激）
+      // ✅ 被塔打到：若已貼塔 -> 立刻爆；若未貼塔 -> 進入狂暴衝刺，貼塔後更快爆
       takeDamage(_amt) {
         if (this.isExploded) return;
-        this.explode(true);
+
+        if (this.state === 'ATTACHED') {
+          this.explode(true);
+          return;
+        }
+
+        // MOVING 狀態：不允許遠距離直接爆，改為「狂暴衝刺」
+        this.forcedByHit = true;
+
+        const text = document.createElement('div');
+        text.className = 'float-text bad';
+        text.innerText = "⚠️ 被打到！狂暴衝刺！";
+        const vec = this.mesh.position.clone(); vec.y += 3; vec.project(game.camera);
+        const x = (vec.x * .5 + .5) * window.innerWidth;
+        const y = (-(vec.y * .5) + .5) * window.innerHeight;
+        text.style.left = `${x}px`;
+        text.style.top = `${y}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 800);
       }
 
       explode(fromHit=false) {
@@ -1674,23 +1703,21 @@
 
         const pos = this.mesh.position.clone();
 
-        // ✅ 範圍爆炸：附近塔都會受傷（含自己貼的塔）
         for (let t of game.towers) {
           const d = t.mesh.position.distanceTo(pos);
           if (d <= BOMB_BUG_RADIUS) {
             const falloff = 1 - (d / BOMB_BUG_RADIUS);
-            const dmg = Math.floor(650 * (0.6 + 0.4 * falloff)); // 有距離衰減但仍很痛
+            const dmg = Math.floor(650 * (0.6 + 0.4 * falloff));
             t.takeDamage(dmg);
           }
         }
 
-        // 特效
         game.particles.push(new EffectParticle(pos.x, 2, pos.z, 0xff1744, 'explode', 2.4));
         AudioSys.boom();
 
         const text = document.createElement('div');
         text.className = 'float-text bad';
-        text.innerText = fromHit ? "💥 被打到提前爆!" : "💥 爆炸!";
+        text.innerText = fromHit ? "💥 提前引爆!" : "💥 爆炸!";
         const vec = pos.clone(); vec.y += 3; vec.project(game.camera);
         const x = (vec.x * .5 + .5) * window.innerWidth;
         const y = (-(vec.y * .5) + .5) * window.innerHeight;
@@ -1699,7 +1726,6 @@
         document.body.appendChild(text);
         setTimeout(() => text.remove(), 900);
 
-        // 移除自己
         game.scene.remove(this.mesh);
         game.bombBugs = game.bombBugs.filter(b => b !== this);
       }
@@ -2041,7 +2067,6 @@
 
       takeDamage(amount) { this.hp -= amount; if(game.selectedTower === this) game.updatePanelInfo(); if (this.hp <= 0) game.removeTower(this); }
 
-      // ✅ 也會攻擊炸彈蟲；且優先打炸彈蟲（保命要緊）
       update(enemies, bombBugs) {
         if (game.isPaused) return;
         if (this.animator) this.animator();
@@ -2052,12 +2077,10 @@
         let target = null;
         let minDist = range;
 
-        // 1) 先找炸彈蟲
         for (let b of bombBugs) {
           const d = this.mesh.position.distanceTo(b.mesh.position);
           if (d <= range && d < minDist) { minDist = d; target = b; }
         }
-        // 2) 沒炸彈蟲才打敵人
         if (!target) {
           for (let e of enemies) {
             const d = this.mesh.position.distanceTo(e.mesh.position);
@@ -2120,7 +2143,6 @@
         if (this.type === 'FIRE') {
           game.particles.push(new EffectParticle(pos.x, pos.y, pos.z, 0xff5722, 'explode', 2));
 
-          // ✅ 火塔範圍傷害：敵人 + 炸彈蟲 都算
           const allTargets = game.enemies.concat(game.bombBugs);
           allTargets.forEach(t => {
             if (t.mesh.position.distanceTo(pos) < 2.5 * TILE_SIZE) t.takeDamage(this.damage);
